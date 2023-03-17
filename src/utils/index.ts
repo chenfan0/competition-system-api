@@ -168,3 +168,7 @@ export function getDiff(prev: string[], cur: string[]) {
   }
   return [newMember, removeMember, immutableMember];
 }
+
+export function isArray(val: unknown) {
+  return Array.isArray(val);
+}

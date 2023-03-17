@@ -7,7 +7,6 @@ import { PHONE_PASSWORD_ROLE_IS_REQUIRED } from "../constant/err-type";
 class RegisterController {
   async register(ctx: Context) {
     const { phone, password, role } = ctx.request.body as any;
-    console.log(phone, password, role);
 
     if (phone && password && role !== undefined) {
       const { data, status } = await registerService.register({

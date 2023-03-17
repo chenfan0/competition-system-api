@@ -359,6 +359,100 @@ class SignUpService {
     return res!;
   }
 
+  async rejectSignUp(signUpId: number, user: string) {
+    const res = sequelize.transaction(async () => {
+      const signUpInfo = await SignUpModel.findOne({
+        raw: true,
+        where: {
+          id: signUpId,
+        },
+      });
+      if (!signUpInfo) {
+        return serviceReturn({
+          code: 400,
+          data: "当前取消的竞赛不存在",
+        });
+      }
+      const { resolveMember, instructors, member, leader } = signUpInfo;
+      const [_resolveMember, _instructors, _member] = [
+        resolveMember,
+        instructors,
+        member,
+      ].map((val) => JSON.parse(val || "[]") as string[]);
+      const studentMember = [..._member, leader];
+      const totalMember = [..._instructors, ..._member, leader];
+      const userList = await UserModel.findAll({
+        raw: true,
+        where: {
+          phone: {
+            [Op.in]: totalMember,
+          },
+        },
+      });
+      const outerSignUpingList: string[] = [];
+      const outerInstructoringList: string[] = [];
+      const outerConfirmList: string[] = [];
+      for (const mem of studentMember) {
+        if (_resolveMember.includes(mem)) {
+          outerSignUpingList.push(mem);
+        } else {
+          outerConfirmList.push(mem);
+        }
+      }
+      for (const ins of _instructors) {
+        if (_resolveMember.includes(ins)) {
+          outerInstructoringList.push(ins);
+        } else {
+          outerConfirmList.push(ins);
+        }
+      }
+      const promiseList: Promise<unknown>[] = [];
+      userList.forEach(
+        ({ phone, signUpingList, instructoringList, confirmList }) => {
+          const [_singUpingList, _instructoringList, _confirmList] = [
+            signUpingList,
+            instructoringList,
+            confirmList,
+          ].map((list) => JSON.parse(list || "[]") as number[]);
+          const rawList = outerConfirmList.includes(phone)
+            ? _confirmList
+            : outerSignUpingList.includes(phone)
+            ? _singUpingList
+            : _instructoringList;
+          const field = outerConfirmList.includes(phone)
+            ? "confirmList"
+            : outerSignUpingList.includes(phone)
+            ? "signUpingList"
+            : "instructoringList";
+          const newList = rawList.filter((id) => id !== signUpId);
+          promiseList.push(
+            UserModel.update(
+              {
+                [field]: JSON.stringify(newList),
+              },
+              {
+                where: {
+                  phone,
+                },
+              }
+            )
+          );
+        }
+      );
+      promiseList.push(
+        SignUpModel.destroy({
+          where: {
+            id: signUpId,
+          },
+        })
+      );
+      await Promise.all(promiseList);
+      return serviceReturn({ code: 200, data: "拒绝成功" });
+    });
+
+    return res;
+  }
+
   async updateSignUpInfo(
     signUpId: number,
     user: string,

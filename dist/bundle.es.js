@@ -489,7 +489,6 @@ var registerService = errCatch(new RegisterService());
 class RegisterController {
     async register(ctx) {
         const { phone, password, role } = ctx.request.body;
-        console.log(phone, password, role);
         if (phone && password && role !== undefined) {
             const { data, status } = await registerService.register({
                 phone,
@@ -1539,6 +1538,88 @@ class SignUpService {
         });
         return res;
     }
+    async rejectSignUp(signUpId, user) {
+        const res = sequelize.transaction(async () => {
+            const signUpInfo = await SignUpModel.findOne({
+                raw: true,
+                where: {
+                    id: signUpId,
+                },
+            });
+            if (!signUpInfo) {
+                return serviceReturn({
+                    code: 400,
+                    data: "当前取消的竞赛不存在",
+                });
+            }
+            const { resolveMember, instructors, member, leader } = signUpInfo;
+            const [_resolveMember, _instructors, _member] = [
+                resolveMember,
+                instructors,
+                member,
+            ].map((val) => JSON.parse(val || "[]"));
+            const studentMember = [..._member, leader];
+            const totalMember = [..._instructors, ..._member, leader];
+            const userList = await UserModel.findAll({
+                raw: true,
+                where: {
+                    phone: {
+                        [Op.in]: totalMember,
+                    },
+                },
+            });
+            const outerSignUpingList = [];
+            const outerConfirmList = [];
+            for (const mem of studentMember) {
+                if (_resolveMember.includes(mem)) {
+                    outerSignUpingList.push(mem);
+                }
+                else {
+                    outerConfirmList.push(mem);
+                }
+            }
+            for (const ins of _instructors) {
+                if (_resolveMember.includes(ins)) ;
+                else {
+                    outerConfirmList.push(ins);
+                }
+            }
+            const promiseList = [];
+            userList.forEach(({ phone, signUpingList, instructoringList, confirmList }) => {
+                const [_singUpingList, _instructoringList, _confirmList] = [
+                    signUpingList,
+                    instructoringList,
+                    confirmList,
+                ].map((list) => JSON.parse(list || "[]"));
+                const rawList = outerConfirmList.includes(phone)
+                    ? _confirmList
+                    : outerSignUpingList.includes(phone)
+                        ? _singUpingList
+                        : _instructoringList;
+                const field = outerConfirmList.includes(phone)
+                    ? "confirmList"
+                    : outerSignUpingList.includes(phone)
+                        ? "signUpingList"
+                        : "instructoringList";
+                const newList = rawList.filter((id) => id !== signUpId);
+                promiseList.push(UserModel.update({
+                    [field]: JSON.stringify(newList),
+                }, {
+                    where: {
+                        phone,
+                    },
+                }));
+            });
+            promiseList.push(SignUpModel.destroy({
+                where: {
+                    id: signUpId,
+                },
+            }));
+            await Promise.all(promiseList);
+            return serviceReturn({ code: 200, data: "拒绝成功" });
+        });
+        return res;
+    }
     async updateSignUpInfo(signUpId, user, { member, instructors, teamName, work, video, }) {
         const signUpInfo = await SignUpModel.findOne({
             raw: true,
@@ -1863,6 +1944,12 @@ class SignUpController {
         const { data, status } = await signUpService.confirmSignUp(signUpId, user);
         setResponse(ctx, data, status);
     }
+    async rejectSignUp(ctx) {
+        const { signUpId } = ctx.request.body;
+        const user = ctx.phone;
+        const { status, data } = await signUpService.rejectSignUp(signUpId, user);
+        setResponse(ctx, data, status);
+    }
     async getSignUpListByCompetitionId(ctx) {
         const { competitionId } = ctx.params;
         const { alreadyProcess } = ctx.query;
@@ -1898,6 +1985,7 @@ var signUpController = errCatch(new SignUpController());
 const signUpRouter = new Router({ prefix: "/signup" });
 signUpRouter.post("/create", verifyToken, signUpController.createSignUp);
 signUpRouter.post("/confirm", verifyToken, signUpController.confirmSignUp);
+signUpRouter.post('/reject', verifyToken, signUpController.rejectSignUp);
 signUpRouter.get("/:competitionId", verifyToken, signUpController.getSignUpListByCompetitionId);
 signUpRouter.post("/update", verifyToken, signUpController.updateSignUpInfo);
 signUpRouter.post("/promote", verifyToken, signUpController.promoteSignUpBySignUpId);

@@ -35,6 +35,14 @@ class SignUpController {
     setResponse(ctx, data, status);
   }
 
+  async rejectSignUp(ctx: Context) {
+    const { signUpId } = ctx.request.body as any;
+    const user = ctx.phone;
+    const { status, data } = await signUpService.rejectSignUp(signUpId, user);
+
+    setResponse(ctx, data, status);
+  }
+
   async getSignUpListByCompetitionId(ctx: Context) {
     const { competitionId } = ctx.params;
     const { alreadyProcess } = ctx.query;
@@ -70,7 +78,7 @@ class SignUpController {
       teamName,
       work,
       video,
-    })
+    });
 
     setResponse(ctx, data, status);
   }

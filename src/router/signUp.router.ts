@@ -8,6 +8,8 @@ signUpRouter.post("/create", verifyToken, signUpController.createSignUp);
 
 signUpRouter.post("/confirm", verifyToken, signUpController.confirmSignUp);
 
+signUpRouter.post('/reject', verifyToken, signUpController.rejectSignUp)
+
 signUpRouter.get(
   "/:competitionId",
   verifyToken,
