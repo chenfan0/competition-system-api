@@ -1,3 +1,4 @@
+import { existsSync, rmSync } from "fs";
 import { Context } from "koa";
 import signUpService from "../service/signUp.service";
 import { errCatch, setResponse } from "../utils";
@@ -12,6 +13,8 @@ class SignUpController {
       member,
       teamName,
       competitionName,
+      work,
+      video,
     } = ctx.request.body as any;
 
     const { data, status } = await signUpService.createSignUp({
@@ -22,6 +25,8 @@ class SignUpController {
       member,
       teamName,
       competitionName,
+      work,
+      video,
     });
 
     return setResponse(ctx, data, status);
@@ -41,6 +46,22 @@ class SignUpController {
     const { status, data } = await signUpService.rejectSignUp(signUpId, user);
 
     setResponse(ctx, data, status);
+  }
+
+  async deleteSignUp(ctx: Context) {
+    const { signUpId } = ctx.request.body as any;
+    const user = ctx.phone;
+    console.log(signUpId);
+
+    const { status, data } = await signUpService.deleteSignUp(signUpId, user);
+
+    setResponse(ctx, data, status);
+  }
+
+  async deleteSignUpFile(path: string) {
+    if (existsSync(path)) {
+      rmSync(path);
+    }
   }
 
   async getSignUpListByCompetitionId(ctx: Context) {

@@ -11,6 +11,7 @@ import nodeSchedule from 'node-schedule';
 import { Sequelize, Column, Table, Model } from 'sequelize-typescript';
 import { Op } from 'sequelize';
 import multer from '@koa/multer';
+import { existsSync as existsSync$1, rmSync } from 'fs';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -1620,6 +1621,134 @@ class SignUpService {
         });
         return res;
     }
+    async deleteSignUp(signUpId, user) {
+        const signUpInfo = await SignUpModel.findOne({
+            where: {
+                id: signUpId,
+            },
+        });
+        if (!signUpInfo) {
+            return serviceReturn({
+                code: 400,
+                data: "删除的报名信息不存在",
+            });
+        }
+        const { leader, resolveMember, instructors, member, status, work, video } = signUpInfo;
+        if (leader !== user) {
+            return serviceReturn({
+                code: 400,
+                data: "不是报名发起者，无法删除该报名",
+            });
+        }
+        const [_resolveMember, _instructors, _member] = [
+            resolveMember,
+            instructors,
+            member,
+        ].map((item) => JSON.parse(item || "[]"));
+        const signUpList = [];
+        const instructorList = [];
+        const confirmList = [];
+        const promiseList = [];
+        const isPending = status === SignUpStatus.pending;
+        for (const ins of _instructors) {
+            if (_resolveMember.includes(ins)) {
+                instructorList.push(ins);
+            }
+            else {
+                confirmList.push(ins);
+            }
+        }
+        for (const mem of [..._member, leader]) {
+            if (_resolveMember.includes(mem)) {
+                signUpList.push(mem);
+            }
+            else {
+                confirmList.push(mem);
+            }
+        }
+        const [studentInfoList, instructorInfoList, confirmInfoList] = await Promise.all([
+            UserModel.findAll({
+                raw: true,
+                where: {
+                    phone: {
+                        [Op.in]: signUpList,
+                    },
+                },
+            }),
+            UserModel.findAll({
+                raw: true,
+                where: {
+                    phone: {
+                        [Op.in]: instructorList,
+                    },
+                },
+            }),
+            UserModel.findAll({
+                raw: true,
+                where: {
+                    phone: {
+                        [Op.in]: confirmList,
+                    },
+                },
+            }),
+        ]);
+        // 更新用户与该报名相关联的数据
+        [
+            [isPending ? "signUpingList" : "signUpedList", studentInfoList],
+            [
+                isPending ? "instructoringList" : "instructoredList",
+                instructorInfoList,
+            ],
+            ["confirmList", confirmInfoList],
+        ].forEach(([key, list]) => {
+            if (!list?.length)
+                return;
+            list.forEach((user) => {
+                const rawList = JSON.parse(user[key] || "[]");
+                const newList = rawList.filter((id) => id !== signUpId);
+                promiseList.push(UserModel.update({
+                    [key]: JSON.stringify(newList),
+                }, {
+                    where: {
+                        phone: user.phone,
+                    },
+                }));
+            });
+        });
+        // 删除文件记录以及文件
+        const [file, videoFile] = [work, video].map((item) => item && JSON.parse(item));
+        [file, videoFile].map(async (fileMsg) => {
+            if (fileMsg) {
+                const { filename } = fileMsg;
+                const fileInfo = await FileModel.findOne({
+                    raw: true,
+                    where: {
+                        filename,
+                    },
+                });
+                if (fileInfo) {
+                    const { path } = fileInfo;
+                    signUpController.deleteSignUpFile(path);
+                    promiseList.push(FileModel.destroy({
+                        where: {
+                            filename,
+                        },
+                    }));
+                }
+            }
+        });
+        // 删除竞赛
+        promiseList.push(SignUpModel.destroy({
+            where: {
+                id: signUpId,
+            },
+        }));
+        await Promise.all(promiseList);
+        return serviceReturn({
+            code: 200,
+            data: "删除报名信息成功",
+        });
+    }
     async updateSignUpInfo(signUpId, user, { member, instructors, teamName, work, video, }) {
         const signUpInfo = await SignUpModel.findOne({
             raw: true,
@@ -1926,7 +2055,7 @@ var signUpService = errCatch(new SignUpService());
 
 class SignUpController {
     async createSignUp(ctx) {
-        const { competitionId, mode, instructors, leader, member, teamName, competitionName, } = ctx.request.body;
+        const { competitionId, mode, instructors, leader, member, teamName, competitionName, work, video, } = ctx.request.body;
         const { data, status } = await signUpService.createSignUp({
             competitionId,
             mode,
@@ -1935,6 +2064,8 @@ class SignUpController {
             member,
             teamName,
             competitionName,
+            work,
+            video,
         });
         return setResponse(ctx, data, status);
     }
@@ -1949,6 +2080,18 @@ class SignUpController {
         const user = ctx.phone;
         const { status, data } = await signUpService.rejectSignUp(signUpId, user);
         setResponse(ctx, data, status);
+    }
+    async deleteSignUp(ctx) {
+        const { signUpId } = ctx.request.body;
+        const user = ctx.phone;
+        console.log(signUpId);
+        const { status, data } = await signUpService.deleteSignUp(signUpId, user);
+        setResponse(ctx, data, status);
+    }
+    async deleteSignUpFile(path) {
+        if (existsSync$1(path)) {
+            rmSync(path);
+        }
     }
     async getSignUpListByCompetitionId(ctx) {
         const { competitionId } = ctx.params;
@@ -1985,7 +2128,8 @@ var signUpController = errCatch(new SignUpController());
 const signUpRouter = new Router({ prefix: "/signup" });
 signUpRouter.post("/create", verifyToken, signUpController.createSignUp);
 signUpRouter.post("/confirm", verifyToken, signUpController.confirmSignUp);
-signUpRouter.post('/reject', verifyToken, signUpController.rejectSignUp);
+signUpRouter.post("/reject", verifyToken, signUpController.rejectSignUp);
+signUpRouter.post("/delete", verifyToken, signUpController.deleteSignUp);
 signUpRouter.get("/:competitionId", verifyToken, signUpController.getSignUpListByCompetitionId);
 signUpRouter.post("/update", verifyToken, signUpController.updateSignUpInfo);
 signUpRouter.post("/promote", verifyToken, signUpController.promoteSignUpBySignUpId);

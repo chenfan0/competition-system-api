@@ -8,7 +8,9 @@ signUpRouter.post("/create", verifyToken, signUpController.createSignUp);
 
 signUpRouter.post("/confirm", verifyToken, signUpController.confirmSignUp);
 
-signUpRouter.post('/reject', verifyToken, signUpController.rejectSignUp)
+signUpRouter.post("/reject", verifyToken, signUpController.rejectSignUp);
+
+signUpRouter.post("/delete", verifyToken, signUpController.deleteSignUp);
 
 signUpRouter.get(
   "/:competitionId",
