@@ -98,6 +98,20 @@ class UploadController {
       },
     });
   }
+
+  async uploadVideo(ctx: Context, next: Next) {
+    await upload.single("video")(ctx, next);
+    if (ctx.file) {
+      await uploadService.createFileRecord(ctx.file);
+    }
+    setResponse(ctx, {
+      code: 200,
+      data: {
+        filename: (ctx.req as any).saveFileName,
+        originalname: (ctx.req as any).originalname,
+      },
+    });
+  }
 }
 
 export default errCatch(new UploadController());

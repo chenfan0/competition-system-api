@@ -67,6 +67,15 @@ class CompetitionController {
     setResponse(ctx, data, status);
   }
 
+  async updateCompetition(ctx: Context) {
+    const param = ctx.request.body as CreateCompetitionDataType;
+
+    const { data, status } = await competitionService.updateCompetition(
+      param,
+      param.id!
+    );
+    setResponse(ctx, data, status);
+  }
   async setCompetitionNextRound(ctx: Context) {
     const { competitionId } = ctx.request.body as any;
 

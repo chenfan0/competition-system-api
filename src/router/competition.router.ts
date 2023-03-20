@@ -29,7 +29,17 @@ competitionRouter.post(
   competitionController.createCompetition
 );
 
-competitionRouter.post('/set/next', verifyToken, competitionController.setCompetitionNextRound)
+competitionRouter.post(
+  "/update",
+  verifyToken,
+  competitionController.updateCompetition
+);
+
+competitionRouter.post(
+  "/set/next",
+  verifyToken,
+  competitionController.setCompetitionNextRound
+);
 
 // 竞赛相关用户，比如发布时选择评委，报名时选择导师，学生
 competitionRouter.get(

@@ -113,7 +113,43 @@ class SignUpService {
         video,
       });
       const signUpId = signUpMsg.dataValues.id!;
-      // TODO更新User表
+      // TODO: 多个竞赛上传的文件相同，当某个竞赛对该文件进行删除时，会导致其他竞赛的文件也被删除
+      // const workAndVideoList: Promise<Partial<FileModel> | null>[] = [];
+      // if (work) {
+      //   const _work = JSON.parse(work) as {
+      //     filename: string;
+      //     originalname: string;
+      //   };
+      //   workAndVideoList.push(
+      //     FileModel.findOne({
+      //       raw: true,
+      //       where: {
+      //         filename: _work.filename,
+      //       },
+      //     })
+      //   );
+      // }
+      // if (video) {
+      //   const _video = JSON.parse(video) as {
+      //     filename: string;
+      //     originalname: string;
+      //   };
+      //   workAndVideoList.push(
+      //     FileModel.findOne({
+      //       raw: true,
+      //       where: {
+      //         filename: _video.filename,
+      //       },
+      //     })
+      //   );
+      // }
+      // const fileRecords = await Promise.all(workAndVideoList);
+      // for (const record of fileRecords) {
+      //   if (record) {
+      //     const { fi } = record
+      //   }
+      // }
+
       const needUpdateList = await UserModel.findAll({
         raw: true,
         where: {
@@ -946,6 +982,7 @@ class SignUpService {
 
   async getSignUpListByCompetitionId(
     competitionId: number,
+    user: string,
     alreadyProcess: number
   ) {
     const competitionDetail = await CompetitionModel.findOne({
@@ -961,7 +998,7 @@ class SignUpService {
     const whereOptions: {
       competitionId: number;
       status: number;
-      alreadyProcess: number;
+      alreadyProcess?: number;
       currentRound?:
         | string
         | {
@@ -970,14 +1007,19 @@ class SignUpService {
     } = {
       competitionId,
       status: SignUpStatus.fulfilled,
-      alreadyProcess,
     };
-    if (alreadyProcess === AlreadyProcess.no) {
+    if (
+      competitionDetail?.status === CompetitionStatus.end ||
+      user === competitionDetail?.opUser
+    ) {
+    } else if (alreadyProcess === AlreadyProcess.no) {
       whereOptions.currentRound = currentRound;
+      whereOptions.alreadyProcess = alreadyProcess;
     } else {
       whereOptions.currentRound = {
         [Op.in]: nextRound ? [currentRound, nextRound] : [currentRound],
       };
+      whereOptions.alreadyProcess = alreadyProcess;
     }
     const signUpList = await SignUpModel.findAndCountAll({
       raw: true,

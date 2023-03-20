@@ -13,6 +13,7 @@ import { SignUpModel } from "../model/SignUpModel";
 import { CompetitionStatus, AlreadyProcess } from "../constant/index";
 
 export interface CreateCompetitionDataType {
+  id?: number;
   name: string;
   description: string;
   address: string;
@@ -23,7 +24,7 @@ export interface CreateCompetitionDataType {
   registrationTime: [string, string];
   workSubmissionTime: [string, string];
   judges: string[];
-  files: Set<string>;
+  files: string[];
   signUpNums?: number[];
   awards: string;
 }
@@ -34,7 +35,8 @@ type FieldType =
   | "confirmList"
   | "instructoredList"
   | "instructoringList"
-  | "judgementList";
+  | "judgementList"
+  | "releaseList";
 
 class CompetitionService {
   async getCompetitionList(
@@ -333,6 +335,149 @@ class CompetitionService {
     });
   }
 
+  async updateCompetition(data: CreateCompetitionDataType, id: number) {
+    const rawCompetition = await CompetitionModel.findOne({
+      attributes: ["judges"],
+      where: {
+        id,
+      },
+    });
+    if (!rawCompetition) {
+      return serviceReturn({
+        code: 400,
+        data: "当前修改的竞赛不存在",
+      });
+    }
+    const rawJudges = JSON.parse(rawCompetition.judges || "[]") as string[];
+    const {
+      name,
+      description,
+      address,
+      level,
+      instructorsNums,
+      mode,
+      rounds,
+      registrationTime,
+      workSubmissionTime,
+      judges,
+      files,
+      signUpNums,
+      awards,
+    } = data;
+    const registrationStartTime = formatTime(registrationTime[0]);
+    const registrationEndTime = formatTime(registrationTime[1]);
+    const workSubmissionStartTime = formatTime(workSubmissionTime[0]);
+    const workSubmissionEndTime = formatTime(workSubmissionTime[1]);
+    const parse = Date.parse;
+    const status = getCompetitionStatus(
+      parse(registrationStartTime),
+      parse(registrationEndTime),
+      parse(workSubmissionStartTime),
+      parse(workSubmissionEndTime)
+    );
+
+    const newAddJudges: string[] = [];
+    const removeJudges: string[] = [];
+
+    for (const raw of rawJudges) {
+      if (!judges.includes(raw)) {
+        removeJudges.push(raw);
+      }
+    }
+    for (const newJudge of judges) {
+      if (!rawJudges.includes(newJudge)) {
+        newAddJudges.push(newJudge);
+      }
+    }
+
+    const res = sequelize.transaction(async () => {
+      const [addUserList, removeUserList] = await Promise.all([
+        UserModel.findAll({
+          where: {
+            phone: {
+              [Op.in]: newAddJudges,
+            },
+          },
+        }),
+        UserModel.findAll({
+          where: {
+            phone: {
+              [Op.in]: removeJudges,
+            },
+          },
+        }),
+      ]);
+      const promiseList: Promise<unknown>[] = [];
+      (
+        [
+          [addUserList, "add"],
+          [removeUserList, "remove"],
+        ] as const
+      ).forEach(([list, key]) => {
+        if (list?.length) {
+          for (const { judgementList, phone } of list) {
+            const rawJudgementList = JSON.parse(
+              judgementList || "[]"
+            ) as number[];
+            const newJudgementList =
+              key === "add"
+                ? [...rawJudgementList, id]
+                : rawJudgementList.filter((rawId) => rawId !== id);
+            promiseList.push(
+              UserModel.update(
+                {
+                  judgementList: JSON.stringify(newJudgementList),
+                },
+                {
+                  where: {
+                    phone,
+                  },
+                }
+              )
+            );
+          }
+        }
+      });
+      const roundsArr = rounds.split("\n");
+      const currentRound = roundsArr[0];
+      promiseList.push(
+        CompetitionModel.update(
+          {
+            name,
+            description,
+            address,
+            level,
+            rounds,
+            awards,
+            currentRound,
+            status,
+            instructorsNums: JSON.stringify(instructorsNums),
+            mode,
+            registrationStartTime,
+            registrationEndTime,
+            workSubmissionStartTime,
+            workSubmissionEndTime,
+            judges: JSON.stringify(judges),
+            files: JSON.stringify(files),
+            signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
+          },
+          {
+            where: {
+              id,
+            },
+          }
+        )
+      );
+      await Promise.all(promiseList);
+      return serviceReturn({
+        code: 200,
+        data: "更新成功",
+      });
+    });
+
+    return res;
+  }
+
   async getSelfCompetition({
     phone,
     pageSize,
@@ -352,6 +497,33 @@ class CompetitionService {
         phone,
       },
     });
+    if (field === "releaseList") {
+      const returnList = await CompetitionModel.findAndCountAll({
+        raw: true,
+        order: [["createdAt", "DESC"]],
+        where: {
+          opUser: phone,
+          name: {
+            [Op.like]: `%${competitionName}%`,
+          },
+        },
+        offset,
+        limit: pageSize,
+      });
+      (returnList.rows as CompetitionModel[]).forEach((list) => {
+        (list as CompetitionModel).registrationStartTime = formatTime(
+          list.registrationStartTime
+        );
+        list.registrationEndTime = formatTime(list.registrationEndTime);
+      });
+      return serviceReturn({
+        code: 200,
+        data: {
+          list: returnList.rows,
+          count: returnList.count,
+        },
+      });
+    }
     const rawList = userMsg && userMsg[field];
     const list = JSON.parse(rawList || "[]") as number[];
     const isJudgeMent = field === "judgementList";
@@ -535,9 +707,28 @@ class CompetitionService {
     // 消息提示
   }
 
-  async deleteCompetition() {}
+  async deleteCompetition(id: number) {
+    const competitionDetail = await CompetitionModel.findOne({
+      raw: true,
+      where: {
+        id,
+      },
+    });
 
-  async updateCompetition() {}
+    if (!competitionDetail) {
+      return serviceReturn({
+        code: 400,
+        data: "删除的竞赛不存在",
+      });
+    }
+    // 移除judgement关于该竞赛的信息
+    const { judges } = competitionDetail!;
+    const signUpList = await SignUpModel.findAll({
+      where: {
+        competitionId: id,
+      },
+    });
+  }
 }
 
 export default errCatch(new CompetitionService());
