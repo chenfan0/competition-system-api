@@ -8,7 +8,6 @@ import { errCatch, serviceReturn } from "../utils";
 import { UserRole, AlreadyProcess, CompetitionStatus } from "../constant/index";
 import { getDiff } from "../utils/index";
 import { FileModel } from "../model/FileModel";
-import signUpController from "../controller/signUp.controller";
 
 interface SignUpInfo {
   competitionId: number;
@@ -23,6 +22,48 @@ interface SignUpInfo {
 }
 
 class SignUpService {
+  private async processFileRecord(
+    type: "add" | "remove",
+    fileString: string,
+    id: number,
+    promiseList: any[]
+  ) {
+    const fileInfo: { filename: string; originalname: string } = JSON.parse(
+      fileString
+    ) as {
+      filename: string;
+      originalname: string;
+    };
+    const record = await FileModel.findOne({
+      raw: true,
+      where: {
+        filename: fileInfo.filename,
+      },
+    });
+    if (!record) return;
+    const { signUpIdList, filename } = record;
+    let newSignUpIdList = JSON.parse(signUpIdList || "[]") as number[];
+    if (type === "add") {
+      if (!newSignUpIdList.includes(id)) {
+        newSignUpIdList.push(id);
+      }
+    } else {
+      newSignUpIdList = newSignUpIdList.filter((signUpId) => signUpId !== id);
+    }
+    promiseList.push(
+      FileModel.update(
+        {
+          signUpIdList: JSON.stringify(newSignUpIdList),
+        },
+        {
+          where: {
+            filename,
+          },
+        }
+      )
+    );
+  }
+
   async createSignUp({
     competitionId,
     mode,
@@ -113,42 +154,6 @@ class SignUpService {
         video,
       });
       const signUpId = signUpMsg.dataValues.id!;
-      // TODO: 多个竞赛上传的文件相同，当某个竞赛对该文件进行删除时，会导致其他竞赛的文件也被删除
-      // const workAndVideoList: Promise<Partial<FileModel> | null>[] = [];
-      // if (work) {
-      //   const _work = JSON.parse(work) as {
-      //     filename: string;
-      //     originalname: string;
-      //   };
-      //   workAndVideoList.push(
-      //     FileModel.findOne({
-      //       raw: true,
-      //       where: {
-      //         filename: _work.filename,
-      //       },
-      //     })
-      //   );
-      // }
-      // if (video) {
-      //   const _video = JSON.parse(video) as {
-      //     filename: string;
-      //     originalname: string;
-      //   };
-      //   workAndVideoList.push(
-      //     FileModel.findOne({
-      //       raw: true,
-      //       where: {
-      //         filename: _video.filename,
-      //       },
-      //     })
-      //   );
-      // }
-      // const fileRecords = await Promise.all(workAndVideoList);
-      // for (const record of fileRecords) {
-      //   if (record) {
-      //     const { fi } = record
-      //   }
-      // }
 
       const needUpdateList = await UserModel.findAll({
         raw: true,
@@ -198,6 +203,15 @@ class SignUpService {
           );
         }
       });
+
+      // 更新文件与报名关联
+      if (work) {
+        await this.processFileRecord("add", work, signUpId, promiseList);
+      }
+      if (video) {
+        await this.processFileRecord("add", video, signUpId, promiseList);
+      }
+
       await Promise.all(promiseList);
       return serviceReturn({
         code: 200,
@@ -477,6 +491,16 @@ class SignUpService {
           );
         }
       );
+
+      // 更新文件记录
+      const { work, video } = signUpInfo;
+      if (work) {
+        await this.processFileRecord("remove", work, signUpId, promiseList);
+      }
+      if (video) {
+        await this.processFileRecord("remove", video, signUpId, promiseList);
+      }
+
       promiseList.push(
         SignUpModel.destroy({
           where: {
@@ -595,31 +619,14 @@ class SignUpService {
       });
     });
     // 删除文件记录以及文件
-    const [file, videoFile] = [work, video].map(
-      (item) => item && JSON.parse(item)
-    );
-    [file, videoFile].map(async (fileMsg) => {
-      if (fileMsg) {
-        const { filename } = fileMsg;
-        const fileInfo = await FileModel.findOne({
-          raw: true,
-          where: {
-            filename,
-          },
-        });
-        if (fileInfo) {
-          const { path } = fileInfo;
-          signUpController.deleteSignUpFile(path);
-          promiseList.push(
-            FileModel.destroy({
-              where: {
-                filename,
-              },
-            })
-          );
-        }
-      }
-    });
+
+    if (work) {
+      await this.processFileRecord("remove", work, signUpId, promiseList);
+    }
+    if (video) {
+      await this.processFileRecord("remove", video, signUpId, promiseList);
+    }
+
     // 删除竞赛
     promiseList.push(
       SignUpModel.destroy({
@@ -946,15 +953,38 @@ class SignUpService {
 
       (
         [
-          ["video", video],
-          ["name", teamName],
+          ["video", video || null],
+          ["name", teamName || null],
           ["work", work],
         ] as const
       ).forEach(([key, val]) => {
-        if (val) {
-          updateInfo[key] = val;
-        }
+        updateInfo[key] = val as any;
       });
+      // 文件处理
+      const rawWork = signUpInfo.work;
+      const rawVideo = signUpInfo.video;
+      for (const [raw, cur] of [
+        [rawWork, work],
+        [rawVideo, video],
+      ]) {
+        if (!raw && cur) {
+          // 之前没有现在有
+          await this.processFileRecord("add", cur, signUpId, promiseList);
+        }
+        if (raw && !cur) {
+          // 之前有现在没有
+          await this.processFileRecord("remove", raw, signUpId, promiseList);
+        }
+        if (raw && cur) {
+          // 之前有现在也有
+          if (raw !== cur) {
+            // 前后不一致
+            await this.processFileRecord("remove", raw, signUpId, promiseList);
+            await this.processFileRecord("add", cur, signUpId, promiseList);
+          }
+        }
+      }
+
       await Promise.all(promiseList);
 
       await SignUpModel.update(
@@ -1060,6 +1090,8 @@ class SignUpService {
     };
     if (award !== "") {
       updateObj.award = award;
+    } else {
+      updateObj.award = null as any
     }
     await SignUpModel.update(updateObj, {
       where: {

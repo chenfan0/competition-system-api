@@ -35,6 +35,8 @@ competitionRouter.post(
   competitionController.updateCompetition
 );
 
+competitionRouter.post('/delete', verifyToken, competitionController.deleteCompetition)
+
 competitionRouter.post(
   "/set/next",
   verifyToken,

@@ -28,33 +28,41 @@ export class UserModel extends Model<Partial<UserModel>> {
   })
   declare password: string;
   @Column({
-    allowNull: true
+    allowNull: true,
   })
   declare signUpedList: string;
   @Column({
-    allowNull: true
+    allowNull: true,
   })
   declare signUpingList: string;
   @Column({
-    allowNull: true
+    allowNull: true,
   })
-  declare confirmList: string
+  declare confirmList: string;
   @Column({
-    allowNull: true
+    allowNull: true,
   })
-  declare instructoredList: string
+  declare instructoredList: string;
   @Column({
-    allowNull: true
+    allowNull: true,
   })
-  declare instructoringList: string
+  declare instructoringList: string;
   @Column({
-    allowNull: true
+    allowNull: true,
   })
-  declare judgementList: string
+  declare judgementList: string;
   @Column
   declare createdAt?: Date;
   @Column
   declare updatedAt?: Date;
+  @Column({
+    allowNull: false,
+  })
+  declare isDisable: number;
+  @Column({
+    allowNull: false,
+  })
+  declare subscriptionList: string;
 }
 
 sequelize.addModels([UserModel]);

@@ -1,4 +1,3 @@
-
 import multer from "@koa/multer";
 import { FileModel } from "../model/FileModel";
 import { errCatch, serviceReturn, setResponse } from "../utils";
@@ -28,14 +27,20 @@ class UploadService {
         }
       );
     } else {
-      await FileModel.create({
-        originalname,
-        size,
-        destination,
-        path,
-        mimetype,
-        filename,
-      });
+      console.log("create");
+
+      try {
+        await FileModel.create({
+          originalname,
+          size,
+          destination,
+          path,
+          mimetype,
+          filename,
+        });
+      } catch (e) {
+        console.log(e);
+      }
     }
 
     return serviceReturn({

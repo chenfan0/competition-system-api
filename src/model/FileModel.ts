@@ -35,6 +35,14 @@ export class FileModel extends Model<Partial<FileModel>> {
   })
   declare originalname: string;
   @Column({
+    allowNull: true,
+  })
+  declare competitionIdList: string;
+  @Column({
+    allowNull: true,
+  })
+  declare signUpIdList: string;
+  @Column({
     allowNull: false,
   })
   declare mimetype: string;

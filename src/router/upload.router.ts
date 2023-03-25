@@ -11,6 +11,9 @@ uploadRouter.get(
 );
 uploadRouter.post("/upload/competition/file", verifyToken, uploadController.uploadFile);
 
+
+uploadRouter.post("/upload/competition/img", verifyToken, uploadController.uploadImg);
+
 uploadRouter.post("/upload/signup/work", verifyToken, uploadController.uploadWork);
 
 uploadRouter.post('/upload/signup/video', verifyToken, uploadController.uploadVideo)

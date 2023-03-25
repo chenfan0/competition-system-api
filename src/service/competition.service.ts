@@ -10,7 +10,14 @@ import { UserModel } from "../model/UserModel";
 import { UserRole } from "../constant";
 import { sequelize } from "../connect";
 import { SignUpModel } from "../model/SignUpModel";
-import { CompetitionStatus, AlreadyProcess } from "../constant/index";
+import {
+  CompetitionStatus,
+  AlreadyProcess,
+  SignUpStatus,
+} from "../constant/index";
+import { FileModel } from "../model/FileModel";
+import { getDiff } from "../utils/index";
+import { SubScriptionModel } from "../model/SubscriptionModel";
 
 export interface CreateCompetitionDataType {
   id?: number;
@@ -25,6 +32,7 @@ export interface CreateCompetitionDataType {
   workSubmissionTime: [string, string];
   judges: string[];
   files: string[];
+  imgs: string[];
   signUpNums?: number[];
   awards: string;
 }
@@ -44,7 +52,8 @@ class CompetitionService {
     size = 10,
     name: string,
     level: string,
-    status: string
+    status: string,
+    user: string
   ) {
     const orOptions: { level?: string; status?: string } = {};
     if (level !== "") {
@@ -54,36 +63,39 @@ class CompetitionService {
       orOptions.status = status;
     }
 
-    const competitionList = await CompetitionModel.findAndCountAll({
-      raw: true,
-      attributes: [
-        "name",
-        "level",
-        "id",
-        "address",
-        "registrationStartTime",
-        "registrationEndTime",
-        "status",
-      ],
-      order: [["createdAt", "DESC"]],
-      where: {
-        [Op.and]: {
-          name: {
-            [Op.like]: `%${name}%`,
+    const [competitionList, subscriptionList] = await Promise.all([
+      CompetitionModel.findAndCountAll({
+        raw: true,
+        order: [["createdAt", "DESC"]],
+        where: {
+          [Op.and]: {
+            name: {
+              [Op.like]: `%${name}%`,
+            },
+            ...orOptions,
           },
-          ...orOptions,
         },
-      },
-      offset,
-      limit: size,
-    });
+        offset,
+        limit: size,
+      }),
+      SubScriptionModel.findAll({
+        raw: true,
+        attributes: ["competitionId"],
+        where: {
+          user,
+        },
+      }),
+    ]);
+    const subscriptionSet = new Set<number>(
+      subscriptionList.map((item) => item.competitionId)
+    );
 
     return serviceReturn({
       code: 200,
       data: {
         total: competitionList.count,
-        list: competitionList.rows.map(
-          ({
+        list: competitionList.rows.map((item) => {
+          const {
             name,
             level,
             id,
@@ -91,16 +103,23 @@ class CompetitionService {
             registrationStartTime,
             registrationEndTime,
             status,
-          }) => ({
+            workSubmissionStartTime,
+            workSubmissionEndTime,
+          } = item;
+          return {
+            ...item,
             id,
             name,
             level,
             address,
             registrationStartTime: formatTime(registrationStartTime),
             registrationEndTime: formatTime(registrationEndTime),
+            workSubmissionStartTime: formatTime(workSubmissionStartTime),
+            workSubmissionEndTime: formatTime(workSubmissionEndTime),
             status,
-          })
-        ),
+            subscription: subscriptionSet.has(id),
+          };
+        }),
       },
     });
   }
@@ -246,6 +265,18 @@ class CompetitionService {
   }
 
   async createCompetition(data: CreateCompetitionDataType, opUser: string) {
+    const userInfo = await UserModel.findOne({
+      raw: true,
+      where: {
+        phone: opUser,
+      },
+    });
+    if (![UserRole.admin, UserRole.teacher].includes(userInfo!.role)) {
+      return serviceReturn({
+        code: 400,
+        data: "当前用户没有创建竞赛的权限",
+      });
+    }
     const {
       name,
       description,
@@ -258,6 +289,7 @@ class CompetitionService {
       workSubmissionTime,
       judges,
       files,
+      imgs,
       signUpNums,
       awards,
     } = data;
@@ -272,7 +304,7 @@ class CompetitionService {
       parse(workSubmissionStartTime),
       parse(workSubmissionEndTime)
     );
-    await sequelize.transaction(async () => {
+    const res = await sequelize.transaction(async () => {
       const roundsArr = rounds.split("\n");
       const currentRound = roundsArr[0];
       // 创建竞赛
@@ -293,10 +325,60 @@ class CompetitionService {
         workSubmissionEndTime,
         judges: JSON.stringify(judges),
         files: JSON.stringify(files),
+        imgs: JSON.stringify(imgs),
         opUser,
         signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
       });
-      const competitionId = createResult.dataValues.id;
+      const competitionId = createResult.dataValues.id!;
+
+      const addFilesRecord = async (files: string[]) => {
+        const promiseList: Promise<unknown>[] = [];
+        const _files = files.map((file) => {
+          const _file = JSON.parse(file) as {
+            filename: string;
+            originalname: string;
+          };
+          return _file.filename;
+        });
+        const fileRecords = await FileModel.findAll({
+          raw: true,
+          where: {
+            filename: {
+              [Op.in]: _files,
+            },
+          },
+        });
+        for (const { competitionIdList, filename } of fileRecords) {
+          const newCompetitionIdList = JSON.parse(
+            competitionIdList || "[]"
+          ) as number[];
+          if (!newCompetitionIdList.includes(competitionId)) {
+            newCompetitionIdList.push(competitionId);
+          }
+          promiseList.push(
+            FileModel.update(
+              {
+                competitionIdList: JSON.stringify(newCompetitionIdList),
+              },
+              {
+                where: {
+                  filename,
+                },
+              }
+            )
+          );
+        }
+
+        await Promise.all(promiseList);
+      };
+
+      // 记录文件与竞赛关系
+      if (files.length) {
+        await addFilesRecord(files);
+      }
+      if (imgs.length) {
+        await addFilesRecord(imgs);
+      }
 
       const judgeList = await UserModel.findAll({
         raw: true,
@@ -327,27 +409,49 @@ class CompetitionService {
         );
       });
       await Promise.all(promiseList);
+      return serviceReturn({
+        code: 200,
+        data: {
+          competitionId,
+        },
+      });
     });
-
-    return serviceReturn({
-      code: 200,
-      data: "创建成功",
-    });
+    return res;
   }
 
-  async updateCompetition(data: CreateCompetitionDataType, id: number) {
-    const rawCompetition = await CompetitionModel.findOne({
-      attributes: ["judges"],
-      where: {
-        id,
-      },
-    });
+  async updateCompetition(
+    data: CreateCompetitionDataType,
+    id: number,
+    user: string
+  ) {
+    const [rawCompetition, userInfo] = await Promise.all([
+      CompetitionModel.findOne({
+        raw: true,
+        where: {
+          id,
+        },
+      }),
+      UserModel.findOne({
+        raw: true,
+        where: {
+          phone: user,
+        },
+      }),
+    ]);
     if (!rawCompetition) {
       return serviceReturn({
         code: 400,
         data: "当前修改的竞赛不存在",
       });
     }
+    console.log(rawCompetition.opUser, user);
+    if (userInfo?.role !== UserRole.admin && rawCompetition.opUser !== user) {
+      return serviceReturn({
+        code: 400,
+        data: "没有修改改竞赛的权限",
+      });
+    }
+
     const rawJudges = JSON.parse(rawCompetition.judges || "[]") as string[];
     const {
       name,
@@ -361,6 +465,7 @@ class CompetitionService {
       workSubmissionTime,
       judges,
       files,
+      imgs,
       signUpNums,
       awards,
     } = data;
@@ -438,8 +543,6 @@ class CompetitionService {
           }
         }
       });
-      const roundsArr = rounds.split("\n");
-      const currentRound = roundsArr[0];
       promiseList.push(
         CompetitionModel.update(
           {
@@ -449,7 +552,6 @@ class CompetitionService {
             level,
             rounds,
             awards,
-            currentRound,
             status,
             instructorsNums: JSON.stringify(instructorsNums),
             mode,
@@ -459,6 +561,7 @@ class CompetitionService {
             workSubmissionEndTime,
             judges: JSON.stringify(judges),
             files: JSON.stringify(files),
+            imgs: JSON.stringify(imgs),
             signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
           },
           {
@@ -468,6 +571,79 @@ class CompetitionService {
           }
         )
       );
+
+      // 更新文件
+      const rawFiles = (
+        JSON.parse(rawCompetition.files || "[]") as string[]
+      ).map((file) => JSON.parse(file).filename as string);
+      const rawImgs = (JSON.parse(rawCompetition.imgs || "[]") as string[]).map(
+        (img) => JSON.parse(img).filename as string
+      );
+      const newFiles = files.map((file) => JSON.parse(file).filename as string);
+      const newImgs = imgs.map((img) => JSON.parse(img).filename as string);
+      const [newAddFiles, removeFiles] = getDiff(
+        [...rawFiles, ...rawImgs],
+        [...newFiles, ...newImgs]
+      );
+
+      const [newAddFileRecords, removeFileRecords] = await Promise.all([
+        FileModel.findAll({
+          raw: true,
+          where: {
+            filename: {
+              [Op.in]: newAddFiles,
+            },
+          },
+        }),
+        FileModel.findAll({
+          raw: true,
+          where: {
+            filename: {
+              [Op.in]: removeFiles,
+            },
+          },
+        }),
+      ]);
+
+      for (const { competitionIdList, filename } of newAddFileRecords) {
+        const newCompetitionIdList = JSON.parse(
+          competitionIdList || "[]"
+        ) as number[];
+        if (!newCompetitionIdList.includes(id)) {
+          newCompetitionIdList.push(id);
+        }
+        promiseList.push(
+          FileModel.update(
+            {
+              competitionIdList: JSON.stringify(newCompetitionIdList),
+            },
+            {
+              where: {
+                filename,
+              },
+            }
+          )
+        );
+      }
+
+      for (const { competitionIdList, filename } of removeFileRecords) {
+        const newCompetitionIdList = (
+          JSON.parse(competitionIdList || "[]") as number[]
+        ).filter((competitionId) => competitionId !== id);
+        promiseList.push(
+          FileModel.update(
+            {
+              competitionIdList: JSON.stringify(newCompetitionIdList),
+            },
+            {
+              where: {
+                filename,
+              },
+            }
+          )
+        );
+      }
+
       await Promise.all(promiseList);
       return serviceReturn({
         code: 200,
@@ -491,12 +667,24 @@ class CompetitionService {
     competitionName: string;
     field: FieldType;
   }) {
-    const userMsg = await UserModel.findOne({
-      raw: true,
-      where: {
-        phone,
-      },
-    });
+    const [userMsg, subscriptionList] = await Promise.all([
+      UserModel.findOne({
+        raw: true,
+        where: {
+          phone,
+        },
+      }),
+      SubScriptionModel.findAll({
+        raw: true,
+        attributes: ["competitionId"],
+        where: {
+          user: phone,
+        },
+      }),
+    ]);
+    const subscriptionSet = new Set<number>(
+      subscriptionList.map((item) => item.competitionId)
+    );
     if (field === "releaseList") {
       const returnList = await CompetitionModel.findAndCountAll({
         raw: true,
@@ -511,10 +699,9 @@ class CompetitionService {
         limit: pageSize,
       });
       (returnList.rows as CompetitionModel[]).forEach((list) => {
-        (list as CompetitionModel).registrationStartTime = formatTime(
-          list.registrationStartTime
-        );
+        list.registrationStartTime = formatTime(list.registrationStartTime);
         list.registrationEndTime = formatTime(list.registrationEndTime);
+        (list as any).subscription = subscriptionSet.has(list.id);
       });
       return serviceReturn({
         code: 200,
@@ -545,10 +732,9 @@ class CompetitionService {
         limit: pageSize,
       });
       (returnList.rows as CompetitionModel[]).forEach((list) => {
-        (list as CompetitionModel).registrationStartTime = formatTime(
-          list.registrationStartTime
-        );
+        list.registrationStartTime = formatTime(list.registrationStartTime);
         list.registrationEndTime = formatTime(list.registrationEndTime);
+        (list as any).subscription = subscriptionSet.has(list.id);
       });
     } else {
       returnList = await SignUpModel.findAndCountAll({
@@ -707,13 +893,21 @@ class CompetitionService {
     // 消息提示
   }
 
-  async deleteCompetition(id: number) {
-    const competitionDetail = await CompetitionModel.findOne({
-      raw: true,
-      where: {
-        id,
-      },
-    });
+  async deleteCompetition(id: number, opUser: string) {
+    const [competitionDetail, userDetail] = await Promise.all([
+      CompetitionModel.findOne({
+        raw: true,
+        where: {
+          id,
+        },
+      }),
+      UserModel.findOne({
+        raw: true,
+        where: {
+          phone: opUser,
+        },
+      }),
+    ]);
 
     if (!competitionDetail) {
       return serviceReturn({
@@ -721,13 +915,301 @@ class CompetitionService {
         data: "删除的竞赛不存在",
       });
     }
-    // 移除judgement关于该竞赛的信息
-    const { judges } = competitionDetail!;
-    const signUpList = await SignUpModel.findAll({
-      where: {
-        competitionId: id,
-      },
+
+    if (
+      competitionDetail.opUser !== opUser &&
+      userDetail!.role !== UserRole.admin
+    ) {
+      return serviceReturn({
+        code: 400,
+        data: "没有删除该竞赛的权限",
+      });
+    }
+
+    const res = sequelize.transaction(async () => {
+      const promiseList: Promise<unknown>[] = [];
+      const { judges, files, imgs } = competitionDetail!;
+      const _judges = JSON.parse(judges || "[]") as string[];
+      const userList: string[] = [..._judges];
+
+      const competitionFiles = JSON.parse(files || "[]") as string[];
+      const competitionImgs = JSON.parse(imgs || "[]") as string[];
+      const signUpFiles: Record<string, number[]> = {};
+      const totalFileNames = new Set<string>([
+        ...competitionFiles.map((file) => JSON.parse(file).filename),
+        ...competitionImgs.map((img) => JSON.parse(img).filename),
+      ]);
+      // 查找报名信息
+      const signUpList = await SignUpModel.findAll({
+        where: {
+          competitionId: id,
+        },
+      });
+      const signUpedObj: Record<string, number[]> = {};
+      const signUpingObj: Record<string, number[]> = {};
+      const instructoredObj: Record<string, number[]> = {};
+      const instructoringObj: Record<string, number[]> = {};
+      const confirmListObj: Record<string, number[]> = {};
+      // 处理报名信息中的相关用户及文件
+      for (const {
+        work,
+        video,
+        member,
+        leader,
+        instructors,
+        resolveMember,
+        id: signUpId,
+        status,
+      } of signUpList) {
+        if (work) {
+          const _work = JSON.parse(work) as { filename: string };
+          totalFileNames.add(_work.filename);
+          const val = signUpFiles[_work.filename] || [];
+          val.push(signUpId);
+          signUpFiles[_work.filename] = val;
+        }
+        if (video) {
+          const _video = JSON.parse(video) as { filename: string };
+          totalFileNames.add(_video.filename);
+          const val = signUpFiles[_video.filename] || [];
+          val.push(signUpId);
+          signUpFiles[_video.filename] = val;
+        }
+        const totalMember = [...JSON.parse(member || "[]"), leader] as string[];
+        const _instructors = JSON.parse(instructors || "[]") as string[];
+        userList.push(...totalMember, ..._instructors);
+        if (status === SignUpStatus.pending) {
+          const _resolveMember = JSON.parse(resolveMember || "[]") as string[];
+          for (const mem of totalMember) {
+            if (_resolveMember.includes(mem)) {
+              const val = signUpingObj[mem] || [];
+              val.push(signUpId);
+              signUpingObj[mem] = val;
+            } else {
+              const val = confirmListObj[mem] || [];
+              val.push(signUpId);
+              confirmListObj[mem] = val;
+            }
+          }
+          for (const ins of _instructors) {
+            if (_resolveMember.includes(ins)) {
+              const val = instructoringObj[ins] || [];
+              val.push(signUpId);
+              instructoringObj[ins] = val;
+            } else {
+              const val = confirmListObj[ins] || [];
+              val.push(signUpId);
+              confirmListObj[ins] = val;
+            }
+          }
+        } else {
+          for (const mem of totalMember) {
+            const val = signUpedObj[mem] || [];
+            val.push(signUpId);
+            signUpedObj[mem] = val;
+          }
+          for (const ins of _instructors) {
+            const val = instructoredObj[ins] || [];
+            val.push(signUpId);
+            instructoredObj[ins] = val;
+          }
+        }
+        // 删除报名信息
+        promiseList.push(
+          SignUpModel.destroy({
+            where: {
+              id: signUpId,
+            },
+          })
+        );
+      }
+      const userInfoList = await UserModel.findAll({
+        where: {
+          phone: {
+            [Op.in]: userList,
+          },
+        },
+      });
+      const phoneToUserInfoMap = new Map<
+        string,
+        {
+          signUpedList: number[];
+          signUpingList: number[];
+          instructoredList: number[];
+          instructoringList: number[];
+          confirmList: number[];
+          judgementList: number[];
+        }
+      >();
+
+      userInfoList.forEach(
+        ({
+          phone,
+          signUpedList,
+          signUpingList,
+          instructoredList,
+          instructoringList,
+          confirmList,
+          judgementList,
+        }) => {
+          (
+            [
+              [signUpedList, "signUpedList"],
+              [signUpingList, "signUpingList"],
+              [instructoredList, "instructoredList"],
+              [instructoringList, "instructoringList"],
+              [confirmList, "confirmList"],
+              [judgementList, "judgementList"],
+            ] as const
+          ).forEach(([list, key]) => {
+            const val = (phoneToUserInfoMap.get(phone) || {}) as {
+              signUpedList: number[];
+              signUpingList: number[];
+              instructoredList: number[];
+              instructoringList: number[];
+              confirmList: number[];
+              judgementList: number[];
+            };
+            val[key] = JSON.parse(list || "[]");
+            phoneToUserInfoMap.set(phone, val);
+          });
+        }
+      );
+      // 处理竞赛相关报名的成员
+      (
+        [
+          [signUpedObj, "signUpedList"],
+          [signUpingObj, "signUpingList"],
+          [instructoredObj, "instructoredList"],
+          [instructoringObj, "instructoringList"],
+          [confirmListObj, "confirmList"],
+        ] as const
+      ).forEach(([obj, updateKey]) => {
+        const phones = Object.keys(obj);
+        phones.forEach((phone) => {
+          const deleteList = obj[phone] || [];
+          const userInfo = phoneToUserInfoMap.get(phone)!;
+          const rawList = userInfo[updateKey];
+          const newList = rawList.filter((id) => !deleteList.includes(id));
+          promiseList.push(
+            UserModel.update(
+              {
+                [updateKey]: JSON.stringify(newList),
+              },
+              {
+                where: {
+                  phone,
+                },
+              }
+            )
+          );
+        });
+      });
+      // 处理裁判
+      _judges.forEach((phone) => {
+        const userInfo = phoneToUserInfoMap.get(phone)!;
+        const rawList = userInfo.judgementList;
+        const newList = rawList.filter((competitionId) => competitionId !== id);
+        promiseList.push(
+          UserModel.update(
+            {
+              judgementList: JSON.stringify(newList),
+            },
+            {
+              where: {
+                phone,
+              },
+            }
+          )
+        );
+      });
+      // 处理竞赛文件
+      // 查找所有竞赛文件
+      const filenameToFileInfoMap = new Map<
+        string,
+        { competitionIdList: number[]; signUpIdList: number[] }
+      >();
+      const fileInfos = await FileModel.findAll({
+        raw: true,
+        where: {
+          filename: {
+            [Op.in]: [...totalFileNames],
+          },
+        },
+      });
+      fileInfos.forEach(({ competitionIdList, signUpIdList, filename }) => {
+        const [list1, list2] = [competitionIdList, signUpIdList].map(
+          (list) => JSON.parse(list || "[]") as number[]
+        );
+        filenameToFileInfoMap.set(filename, {
+          competitionIdList: list1,
+          signUpIdList: list2,
+        });
+      });
+      [competitionFiles, competitionImgs].forEach((files) => {
+        files.forEach((_file) => {
+          const file = JSON.parse(_file) as { filename: string };
+          const { competitionIdList } = filenameToFileInfoMap.get(
+            file.filename
+          )!;
+          const newList = competitionIdList.filter(
+            (competitionId) => competitionId !== id
+          );
+          promiseList.push(
+            FileModel.update(
+              {
+                competitionIdList: JSON.stringify(newList),
+              },
+              {
+                where: {
+                  filename: file.filename,
+                },
+              }
+            )
+          );
+        });
+      });
+      for (const filename of Object.keys(signUpFiles)) {
+        const removeSignUpIdList = signUpFiles[filename];
+        const { signUpIdList } = filenameToFileInfoMap.get(filename)!;
+        const newList = signUpIdList.filter(
+          (signUpId) => !removeSignUpIdList.includes(signUpId)
+        );
+        promiseList.push(
+          FileModel.update(
+            {
+              signUpIdList: JSON.stringify(newList),
+            },
+            {
+              where: {
+                filename: filename,
+              },
+            }
+          )
+        );
+      }
+      promiseList.push(
+        CompetitionModel.destroy({
+          where: {
+            id,
+          },
+        })
+      );
+
+      promiseList.push(
+        SubScriptionModel.destroy({
+          where: {
+            competitionId: id,
+          },
+        })
+      );
+      await Promise.all(promiseList);
+      return serviceReturn({
+        code: 200,
+        data: "删除竞赛成功",
+      });
     });
+    return res;
   }
 }
 

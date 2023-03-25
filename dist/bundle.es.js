@@ -135,9 +135,17 @@ __decorate([
     __metadata("design:type", String)
 ], CompetitionModel.prototype, "workSubmissionEndTime", void 0);
 __decorate([
-    Column,
+    Column({
+        allowNull: true,
+    }),
     __metadata("design:type", String)
 ], CompetitionModel.prototype, "files", void 0);
+__decorate([
+    Column({
+        allowNull: true,
+    }),
+    __metadata("design:type", String)
+], CompetitionModel.prototype, "imgs", void 0);
 __decorate([
     Column({
         allowNull: false,
@@ -353,37 +361,37 @@ __decorate([
 ], UserModel.prototype, "password", void 0);
 __decorate([
     Column({
-        allowNull: true
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "signUpedList", void 0);
 __decorate([
     Column({
-        allowNull: true
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "signUpingList", void 0);
 __decorate([
     Column({
-        allowNull: true
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "confirmList", void 0);
 __decorate([
     Column({
-        allowNull: true
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "instructoredList", void 0);
 __decorate([
     Column({
-        allowNull: true
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "instructoringList", void 0);
 __decorate([
     Column({
-        allowNull: true
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "judgementList", void 0);
@@ -395,12 +403,60 @@ __decorate([
     Column,
     __metadata("design:type", Date)
 ], UserModel.prototype, "updatedAt", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", Number)
+], UserModel.prototype, "isDisable", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], UserModel.prototype, "subscriptionList", void 0);
 UserModel = __decorate([
     Table({
         tableName: "user",
     })
 ], UserModel);
 sequelize.addModels([UserModel]);
+
+var UserRole;
+(function (UserRole) {
+    UserRole[UserRole["student"] = 0] = "student";
+    UserRole[UserRole["teacher"] = 1] = "teacher";
+    UserRole[UserRole["admin"] = 2] = "admin";
+})(UserRole || (UserRole = {}));
+var CompetitionMode;
+(function (CompetitionMode) {
+    CompetitionMode[CompetitionMode["singe"] = 0] = "singe";
+    CompetitionMode[CompetitionMode["team"] = 1] = "team";
+})(CompetitionMode || (CompetitionMode = {}));
+var SignUpStatus;
+(function (SignUpStatus) {
+    SignUpStatus[SignUpStatus["pending"] = 1] = "pending";
+    SignUpStatus[SignUpStatus["fulfilled"] = 0] = "fulfilled";
+})(SignUpStatus || (SignUpStatus = {}));
+var CompetitionStatus;
+(function (CompetitionStatus) {
+    CompetitionStatus[CompetitionStatus["beforeSignUp"] = 0] = "beforeSignUp";
+    CompetitionStatus[CompetitionStatus["signUping"] = 1] = "signUping";
+    CompetitionStatus[CompetitionStatus["waitUpload"] = 2] = "waitUpload";
+    CompetitionStatus[CompetitionStatus["uploading"] = 3] = "uploading";
+    CompetitionStatus[CompetitionStatus["waitResult"] = 4] = "waitResult";
+    CompetitionStatus[CompetitionStatus["end"] = 5] = "end";
+})(CompetitionStatus || (CompetitionStatus = {}));
+var AlreadyProcess;
+(function (AlreadyProcess) {
+    AlreadyProcess[AlreadyProcess["yes"] = 1] = "yes";
+    AlreadyProcess[AlreadyProcess["no"] = 0] = "no";
+})(AlreadyProcess || (AlreadyProcess = {}));
+var UserDisable;
+(function (UserDisable) {
+    UserDisable[UserDisable["yes"] = 1] = "yes";
+    UserDisable[UserDisable["no"] = 0] = "no";
+})(UserDisable || (UserDisable = {}));
 
 class LoginService {
     async login({ password, phone }) {
@@ -409,7 +465,7 @@ class LoginService {
             where: {
                 phone,
             },
-            attributes: ["password", 'role'],
+            attributes: ["password", "role", 'isDisable'],
         });
         if (!isPhoneExist) {
             return serviceReturn({
@@ -423,11 +479,17 @@ class LoginService {
                 data: "密码错误",
             });
         }
+        if (isPhoneExist.isDisable === UserDisable.yes) {
+            return serviceReturn({
+                code: 400,
+                data: "当前用户已被禁用",
+            });
+        }
         return serviceReturn({
             code: 200,
             data: {
                 phone,
-                role: isPhoneExist.role
+                role: isPhoneExist.role,
             },
         });
     }
@@ -508,37 +570,6 @@ var registerController = errCatch(new RegisterController());
 
 const registerRouter$1 = new Router({ prefix: "/register" });
 registerRouter$1.post('/', registerController.register);
-
-var UserRole;
-(function (UserRole) {
-    UserRole[UserRole["student"] = 0] = "student";
-    UserRole[UserRole["teacher"] = 1] = "teacher";
-    UserRole[UserRole["admin"] = 2] = "admin";
-})(UserRole || (UserRole = {}));
-var CompetitionMode;
-(function (CompetitionMode) {
-    CompetitionMode[CompetitionMode["singe"] = 0] = "singe";
-    CompetitionMode[CompetitionMode["team"] = 1] = "team";
-})(CompetitionMode || (CompetitionMode = {}));
-var SignUpStatus;
-(function (SignUpStatus) {
-    SignUpStatus[SignUpStatus["pending"] = 1] = "pending";
-    SignUpStatus[SignUpStatus["fulfilled"] = 0] = "fulfilled";
-})(SignUpStatus || (SignUpStatus = {}));
-var CompetitionStatus;
-(function (CompetitionStatus) {
-    CompetitionStatus[CompetitionStatus["beforeSignUp"] = 0] = "beforeSignUp";
-    CompetitionStatus[CompetitionStatus["signUping"] = 1] = "signUping";
-    CompetitionStatus[CompetitionStatus["waitUpload"] = 2] = "waitUpload";
-    CompetitionStatus[CompetitionStatus["uploading"] = 3] = "uploading";
-    CompetitionStatus[CompetitionStatus["waitResult"] = 4] = "waitResult";
-    CompetitionStatus[CompetitionStatus["end"] = 5] = "end";
-})(CompetitionStatus || (CompetitionStatus = {}));
-var AlreadyProcess;
-(function (AlreadyProcess) {
-    AlreadyProcess[AlreadyProcess["yes"] = 1] = "yes";
-    AlreadyProcess[AlreadyProcess["no"] = 0] = "no";
-})(AlreadyProcess || (AlreadyProcess = {}));
 
 let SignUpModel = class SignUpModel extends Model {
 };
@@ -653,8 +684,115 @@ SignUpModel = __decorate([
 ], SignUpModel);
 sequelize.addModels([SignUpModel]);
 
+let FileModel = class FileModel extends Model {
+};
+__decorate([
+    Column({
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false,
+    }),
+    __metadata("design:type", Number)
+], FileModel.prototype, "id", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "filename", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+        unique: true,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "path", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "destination", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", Number)
+], FileModel.prototype, "size", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "originalname", void 0);
+__decorate([
+    Column({
+        allowNull: true,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "competitionIdList", void 0);
+__decorate([
+    Column({
+        allowNull: true,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "signUpIdList", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], FileModel.prototype, "mimetype", void 0);
+FileModel = __decorate([
+    Table({
+        tableName: "file",
+        createdAt: false,
+        updatedAt: false,
+    })
+], FileModel);
+sequelize.addModels([FileModel]);
+
+let SubScriptionModel = class SubScriptionModel extends Model {
+};
+__decorate([
+    Column({
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false,
+    }),
+    __metadata("design:type", Number)
+], SubScriptionModel.prototype, "id", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+        unique: true
+    }),
+    __metadata("design:type", Number)
+], SubScriptionModel.prototype, "competitionId", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+        unique: true,
+    }),
+    __metadata("design:type", String)
+], SubScriptionModel.prototype, "user", void 0);
+__decorate([
+    Column,
+    __metadata("design:type", Date)
+], SubScriptionModel.prototype, "createdAt", void 0);
+__decorate([
+    Column,
+    __metadata("design:type", Date)
+], SubScriptionModel.prototype, "updatedAt", void 0);
+SubScriptionModel = __decorate([
+    Table({
+        tableName: "subscription",
+    })
+], SubScriptionModel);
+sequelize.addModels([SubScriptionModel]);
+
 class CompetitionService {
-    async getCompetitionList(offset = 0, size = 10, name, level, status) {
+    async getCompetitionList(offset = 0, size = 10, name, level, status, user) {
         const orOptions = {};
         if (level !== "") {
             orOptions.level = level;
@@ -662,42 +800,50 @@ class CompetitionService {
         if (status !== "") {
             orOptions.status = status;
         }
-        const competitionList = await CompetitionModel.findAndCountAll({
-            raw: true,
-            attributes: [
-                "name",
-                "level",
-                "id",
-                "address",
-                "registrationStartTime",
-                "registrationEndTime",
-                "status",
-            ],
-            order: [["createdAt", "DESC"]],
-            where: {
-                [Op.and]: {
-                    name: {
-                        [Op.like]: `%${name}%`,
+        const [competitionList, subscriptionList] = await Promise.all([
+            CompetitionModel.findAndCountAll({
+                raw: true,
+                order: [["createdAt", "DESC"]],
+                where: {
+                    [Op.and]: {
+                        name: {
+                            [Op.like]: `%${name}%`,
+                        },
+                        ...orOptions,
                     },
-                    ...orOptions,
                 },
-            },
-            offset,
-            limit: size,
-        });
+                offset,
+                limit: size,
+            }),
+            SubScriptionModel.findAll({
+                raw: true,
+                attributes: ["competitionId"],
+                where: {
+                    user,
+                },
+            }),
+        ]);
+        const subscriptionSet = new Set(subscriptionList.map((item) => item.competitionId));
         return serviceReturn({
             code: 200,
             data: {
                 total: competitionList.count,
-                list: competitionList.rows.map(({ name, level, id, address, registrationStartTime, registrationEndTime, status, }) => ({
-                    id,
-                    name,
-                    level,
-                    address,
-                    registrationStartTime: formatTime(registrationStartTime),
-                    registrationEndTime: formatTime(registrationEndTime),
-                    status,
-                })),
+                list: competitionList.rows.map((item) => {
+                    const { name, level, id, address, registrationStartTime, registrationEndTime, status, workSubmissionStartTime, workSubmissionEndTime, } = item;
+                    return {
+                        ...item,
+                        id,
+                        name,
+                        level,
+                        address,
+                        registrationStartTime: formatTime(registrationStartTime),
+                        registrationEndTime: formatTime(registrationEndTime),
+                        workSubmissionStartTime: formatTime(workSubmissionStartTime),
+                        workSubmissionEndTime: formatTime(workSubmissionEndTime),
+                        status,
+                        subscription: subscriptionSet.has(id),
+                    };
+                }),
             },
         });
     }
@@ -807,14 +953,26 @@ class CompetitionService {
         });
     }
     async createCompetition(data, opUser) {
-        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, files, signUpNums, awards, } = data;
+        const userInfo = await UserModel.findOne({
+            raw: true,
+            where: {
+                phone: opUser,
+            },
+        });
+        if (![UserRole.admin, UserRole.teacher].includes(userInfo.role)) {
+            return serviceReturn({
+                code: 400,
+                data: "当前用户没有创建竞赛的权限",
+            });
+        }
+        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, files, imgs, signUpNums, awards, } = data;
         const registrationStartTime = formatTime(registrationTime[0]);
         const registrationEndTime = formatTime(registrationTime[1]);
         const workSubmissionStartTime = formatTime(workSubmissionTime[0]);
         const workSubmissionEndTime = formatTime(workSubmissionTime[1]);
         const parse = Date.parse;
         const status = getCompetitionStatus(parse(registrationStartTime), parse(registrationEndTime), parse(workSubmissionStartTime), parse(workSubmissionEndTime));
-        await sequelize.transaction(async () => {
+        const res = await sequelize.transaction(async () => {
             const roundsArr = rounds.split("\n");
             const currentRound = roundsArr[0];
             // 创建竞赛
@@ -835,10 +993,47 @@ class CompetitionService {
                 workSubmissionEndTime,
                 judges: JSON.stringify(judges),
                 files: JSON.stringify(files),
+                imgs: JSON.stringify(imgs),
                 opUser,
                 signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
             });
             const competitionId = createResult.dataValues.id;
+            const addFilesRecord = async (files) => {
+                const promiseList = [];
+                const _files = files.map((file) => {
+                    const _file = JSON.parse(file);
+                    return _file.filename;
+                });
+                const fileRecords = await FileModel.findAll({
+                    raw: true,
+                    where: {
+                        filename: {
+                            [Op.in]: _files,
+                        },
+                    },
+                });
+                for (const { competitionIdList, filename } of fileRecords) {
+                    const newCompetitionIdList = JSON.parse(competitionIdList || "[]");
+                    if (!newCompetitionIdList.includes(competitionId)) {
+                        newCompetitionIdList.push(competitionId);
+                    }
+                    promiseList.push(FileModel.update({
+                        competitionIdList: JSON.stringify(newCompetitionIdList),
+                    }, {
+                        where: {
+                            filename,
+                        },
+                    }));
+                }
+                await Promise.all(promiseList);
+            };
+            // 记录文件与竞赛关系
+            if (files.length) {
+                await addFilesRecord(files);
+            }
+            if (imgs.length) {
+                await addFilesRecord(imgs);
+            }
             const judgeList = await UserModel.findAll({
                 raw: true,
                 where: {
@@ -861,27 +1056,45 @@ class CompetitionService {
                 }));
             });
             await Promise.all(promiseList);
+            return serviceReturn({
+                code: 200,
+                data: {
+                    competitionId,
+                },
+            });
         });
-        return serviceReturn({
-            code: 200,
-            data: "创建成功",
-        });
+        return res;
     }
-    async updateCompetition(data, id) {
-        const rawCompetition = await CompetitionModel.findOne({
-            attributes: ["judges"],
-            where: {
-                id,
-            },
-        });
+    async updateCompetition(data, id, user) {
+        const [rawCompetition, userInfo] = await Promise.all([
+            CompetitionModel.findOne({
+                raw: true,
+                where: {
+                    id,
+                },
+            }),
+            UserModel.findOne({
+                raw: true,
+                where: {
+                    phone: user,
+                },
+            }),
+        ]);
         if (!rawCompetition) {
             return serviceReturn({
                 code: 400,
                 data: "当前修改的竞赛不存在",
             });
         }
+        console.log(rawCompetition.opUser, user);
+        if (userInfo?.role !== UserRole.admin && rawCompetition.opUser !== user) {
+            return serviceReturn({
+                code: 400,
+                data: "没有修改改竞赛的权限",
+            });
+        }
         const rawJudges = JSON.parse(rawCompetition.judges || "[]");
-        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, files, signUpNums, awards, } = data;
+        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, files, imgs, signUpNums, awards, } = data;
         const registrationStartTime = formatTime(registrationTime[0]);
         const registrationEndTime = formatTime(registrationTime[1]);
         const workSubmissionStartTime = formatTime(workSubmissionTime[0]);
@@ -938,8 +1151,6 @@ class CompetitionService {
                     }
                 }
             });
-            const roundsArr = rounds.split("\n");
-            const currentRound = roundsArr[0];
             promiseList.push(CompetitionModel.update({
                 name,
                 description,
@@ -947,7 +1158,6 @@ class CompetitionService {
                 level,
                 rounds,
                 awards,
-                currentRound,
                 status,
                 instructorsNums: JSON.stringify(instructorsNums),
                 mode,
@@ -957,12 +1167,60 @@ class CompetitionService {
                 workSubmissionEndTime,
                 judges: JSON.stringify(judges),
                 files: JSON.stringify(files),
+                imgs: JSON.stringify(imgs),
                 signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
             }, {
                 where: {
                     id,
                 },
             }));
+            // 更新文件
+            const rawFiles = JSON.parse(rawCompetition.files || "[]").map((file) => JSON.parse(file).filename);
+            const rawImgs = JSON.parse(rawCompetition.imgs || "[]").map((img) => JSON.parse(img).filename);
+            const newFiles = files.map((file) => JSON.parse(file).filename);
+            const newImgs = imgs.map((img) => JSON.parse(img).filename);
+            const [newAddFiles, removeFiles] = getDiff([...rawFiles, ...rawImgs], [...newFiles, ...newImgs]);
+            const [newAddFileRecords, removeFileRecords] = await Promise.all([
+                FileModel.findAll({
+                    raw: true,
+                    where: {
+                        filename: {
+                            [Op.in]: newAddFiles,
+                        },
+                    },
+                }),
+                FileModel.findAll({
+                    raw: true,
+                    where: {
+                        filename: {
+                            [Op.in]: removeFiles,
+                        },
+                    },
+                }),
+            ]);
+            for (const { competitionIdList, filename } of newAddFileRecords) {
+                const newCompetitionIdList = JSON.parse(competitionIdList || "[]");
+                if (!newCompetitionIdList.includes(id)) {
+                    newCompetitionIdList.push(id);
+                }
+                promiseList.push(FileModel.update({
+                    competitionIdList: JSON.stringify(newCompetitionIdList),
+                }, {
+                    where: {
+                        filename,
+                    },
+                }));
+            }
+            for (const { competitionIdList, filename } of removeFileRecords) {
+                const newCompetitionIdList = JSON.parse(competitionIdList || "[]").filter((competitionId) => competitionId !== id);
+                promiseList.push(FileModel.update({
+                    competitionIdList: JSON.stringify(newCompetitionIdList),
+                }, {
+                    where: {
+                        filename,
+                    },
+                }));
+            }
             await Promise.all(promiseList);
             return serviceReturn({
                 code: 200,
@@ -972,12 +1230,22 @@ class CompetitionService {
         return res;
     }
     async getSelfCompetition({ phone, pageSize, offset, competitionName, field, }) {
-        const userMsg = await UserModel.findOne({
-            raw: true,
-            where: {
-                phone,
-            },
-        });
+        const [userMsg, subscriptionList] = await Promise.all([
+            UserModel.findOne({
+                raw: true,
+                where: {
+                    phone,
+                },
+            }),
+            SubScriptionModel.findAll({
+                raw: true,
+                attributes: ["competitionId"],
+                where: {
+                    user: phone,
+                },
+            }),
+        ]);
+        const subscriptionSet = new Set(subscriptionList.map((item) => item.competitionId));
         if (field === "releaseList") {
             const returnList = await CompetitionModel.findAndCountAll({
                 raw: true,
@@ -994,6 +1262,7 @@ class CompetitionService {
             returnList.rows.forEach((list) => {
                 list.registrationStartTime = formatTime(list.registrationStartTime);
                 list.registrationEndTime = formatTime(list.registrationEndTime);
+                list.subscription = subscriptionSet.has(list.id);
             });
             return serviceReturn({
                 code: 200,
@@ -1023,6 +1292,7 @@ class CompetitionService {
             returnList.rows.forEach((list) => {
                 list.registrationStartTime = formatTime(list.registrationStartTime);
                 list.registrationEndTime = formatTime(list.registrationEndTime);
+                list.subscription = subscriptionSet.has(list.id);
             });
         }
         else {
@@ -1138,14 +1408,250 @@ class CompetitionService {
         return serviceReturn({ code: 200, data: "设置成功" });
         // 消息提示
     }
-    async deleteCompetition() { }
+    async deleteCompetition(id, opUser) {
+        const [competitionDetail, userDetail] = await Promise.all([
+            CompetitionModel.findOne({
+                raw: true,
+                where: {
+                    id,
+                },
+            }),
+            UserModel.findOne({
+                raw: true,
+                where: {
+                    phone: opUser,
+                },
+            }),
+        ]);
+        if (!competitionDetail) {
+            return serviceReturn({
+                code: 400,
+                data: "删除的竞赛不存在",
+            });
+        }
+        if (competitionDetail.opUser !== opUser &&
+            userDetail.role !== UserRole.admin) {
+            return serviceReturn({
+                code: 400,
+                data: "没有删除该竞赛的权限",
+            });
+        }
+        const res = sequelize.transaction(async () => {
+            const promiseList = [];
+            const { judges, files, imgs } = competitionDetail;
+            const _judges = JSON.parse(judges || "[]");
+            const userList = [..._judges];
+            const competitionFiles = JSON.parse(files || "[]");
+            const competitionImgs = JSON.parse(imgs || "[]");
+            const signUpFiles = {};
+            const totalFileNames = new Set([
+                ...competitionFiles.map((file) => JSON.parse(file).filename),
+                ...competitionImgs.map((img) => JSON.parse(img).filename),
+            ]);
+            // 查找报名信息
+            const signUpList = await SignUpModel.findAll({
+                where: {
+                    competitionId: id,
+                },
+            });
+            const signUpedObj = {};
+            const signUpingObj = {};
+            const instructoredObj = {};
+            const instructoringObj = {};
+            const confirmListObj = {};
+            // 处理报名信息中的相关用户及文件
+            for (const { work, video, member, leader, instructors, resolveMember, id: signUpId, status, } of signUpList) {
+                if (work) {
+                    const _work = JSON.parse(work);
+                    totalFileNames.add(_work.filename);
+                    const val = signUpFiles[_work.filename] || [];
+                    val.push(signUpId);
+                    signUpFiles[_work.filename] = val;
+                }
+                if (video) {
+                    const _video = JSON.parse(video);
+                    totalFileNames.add(_video.filename);
+                    const val = signUpFiles[_video.filename] || [];
+                    val.push(signUpId);
+                    signUpFiles[_video.filename] = val;
+                }
+                const totalMember = [...JSON.parse(member || "[]"), leader];
+                const _instructors = JSON.parse(instructors || "[]");
+                userList.push(...totalMember, ..._instructors);
+                if (status === SignUpStatus.pending) {
+                    const _resolveMember = JSON.parse(resolveMember || "[]");
+                    for (const mem of totalMember) {
+                        if (_resolveMember.includes(mem)) {
+                            const val = signUpingObj[mem] || [];
+                            val.push(signUpId);
+                            signUpingObj[mem] = val;
+                        }
+                        else {
+                            const val = confirmListObj[mem] || [];
+                            val.push(signUpId);
+                            confirmListObj[mem] = val;
+                        }
+                    }
+                    for (const ins of _instructors) {
+                        if (_resolveMember.includes(ins)) {
+                            const val = instructoringObj[ins] || [];
+                            val.push(signUpId);
+                            instructoringObj[ins] = val;
+                        }
+                        else {
+                            const val = confirmListObj[ins] || [];
+                            val.push(signUpId);
+                            confirmListObj[ins] = val;
+                        }
+                    }
+                }
+                else {
+                    for (const mem of totalMember) {
+                        const val = signUpedObj[mem] || [];
+                        val.push(signUpId);
+                        signUpedObj[mem] = val;
+                    }
+                    for (const ins of _instructors) {
+                        const val = instructoredObj[ins] || [];
+                        val.push(signUpId);
+                        instructoredObj[ins] = val;
+                    }
+                }
+                // 删除报名信息
+                promiseList.push(SignUpModel.destroy({
+                    where: {
+                        id: signUpId,
+                    },
+                }));
+            }
+            const userInfoList = await UserModel.findAll({
+                where: {
+                    phone: {
+                        [Op.in]: userList,
+                    },
+                },
+            });
+            const phoneToUserInfoMap = new Map();
+            userInfoList.forEach(({ phone, signUpedList, signUpingList, instructoredList, instructoringList, confirmList, judgementList, }) => {
+                [
+                    [signUpedList, "signUpedList"],
+                    [signUpingList, "signUpingList"],
+                    [instructoredList, "instructoredList"],
+                    [instructoringList, "instructoringList"],
+                    [confirmList, "confirmList"],
+                    [judgementList, "judgementList"],
+                ].forEach(([list, key]) => {
+                    const val = (phoneToUserInfoMap.get(phone) || {});
+                    val[key] = JSON.parse(list || "[]");
+                    phoneToUserInfoMap.set(phone, val);
+                });
+            });
+            // 处理竞赛相关报名的成员
+            [
+                [signUpedObj, "signUpedList"],
+                [signUpingObj, "signUpingList"],
+                [instructoredObj, "instructoredList"],
+                [instructoringObj, "instructoringList"],
+                [confirmListObj, "confirmList"],
+            ].forEach(([obj, updateKey]) => {
+                const phones = Object.keys(obj);
+                phones.forEach((phone) => {
+                    const deleteList = obj[phone] || [];
+                    const userInfo = phoneToUserInfoMap.get(phone);
+                    const rawList = userInfo[updateKey];
+                    const newList = rawList.filter((id) => !deleteList.includes(id));
+                    promiseList.push(UserModel.update({
+                        [updateKey]: JSON.stringify(newList),
+                    }, {
+                        where: {
+                            phone,
+                        },
+                    }));
+                });
+            });
+            // 处理裁判
+            _judges.forEach((phone) => {
+                const userInfo = phoneToUserInfoMap.get(phone);
+                const rawList = userInfo.judgementList;
+                const newList = rawList.filter((competitionId) => competitionId !== id);
+                promiseList.push(UserModel.update({
+                    judgementList: JSON.stringify(newList),
+                }, {
+                    where: {
+                        phone,
+                    },
+                }));
+            });
+            // 处理竞赛文件
+            // 查找所有竞赛文件
+            const filenameToFileInfoMap = new Map();
+            const fileInfos = await FileModel.findAll({
+                raw: true,
+                where: {
+                    filename: {
+                        [Op.in]: [...totalFileNames],
+                    },
+                },
+            });
+            fileInfos.forEach(({ competitionIdList, signUpIdList, filename }) => {
+                const [list1, list2] = [competitionIdList, signUpIdList].map((list) => JSON.parse(list || "[]"));
+                filenameToFileInfoMap.set(filename, {
+                    competitionIdList: list1,
+                    signUpIdList: list2,
+                });
+            });
+            [competitionFiles, competitionImgs].forEach((files) => {
+                files.forEach((_file) => {
+                    const file = JSON.parse(_file);
+                    const { competitionIdList } = filenameToFileInfoMap.get(file.filename);
+                    const newList = competitionIdList.filter((competitionId) => competitionId !== id);
+                    promiseList.push(FileModel.update({
+                        competitionIdList: JSON.stringify(newList),
+                    }, {
+                        where: {
+                            filename: file.filename,
+                        },
+                    }));
+                });
+            });
+            for (const filename of Object.keys(signUpFiles)) {
+                const removeSignUpIdList = signUpFiles[filename];
+                const { signUpIdList } = filenameToFileInfoMap.get(filename);
+                const newList = signUpIdList.filter((signUpId) => !removeSignUpIdList.includes(signUpId));
+                promiseList.push(FileModel.update({
+                    signUpIdList: JSON.stringify(newList),
+                }, {
+                    where: {
+                        filename: filename,
+                    },
+                }));
+            }
+            promiseList.push(CompetitionModel.destroy({
+                where: {
+                    id,
+                },
+            }));
+            promiseList.push(SubScriptionModel.destroy({
+                where: {
+                    competitionId: id,
+                },
+            }));
+            await Promise.all(promiseList);
+            return serviceReturn({
+                code: 200,
+                data: "删除竞赛成功",
+            });
+        });
+        return res;
+    }
 }
 var competitionService = errCatch(new CompetitionService());
 
 class CompetitionController {
     async getCompetitionList(ctx, next) {
         const { offset, size, level, name, status } = ctx.query;
-        const { status: resStatus, data } = await competitionService.getCompetitionList(Number(offset), Number(size), name, level, status);
+        const user = ctx.phone;
+        const { status: resStatus, data } = await competitionService.getCompetitionList(Number(offset), Number(size), name, level, status, user);
         setResponse(ctx, data, resStatus);
     }
     async getCompetitionDetail(ctx, next) {
@@ -1178,7 +1684,12 @@ class CompetitionController {
     }
     async updateCompetition(ctx) {
         const param = ctx.request.body;
-        const { data, status } = await competitionService.updateCompetition(param, param.id);
+        const { data, status } = await competitionService.updateCompetition(param, param.id, ctx.phone);
+        setResponse(ctx, data, status);
+    }
+    async deleteCompetition(ctx) {
+        const { id } = ctx.request.body;
+        const { data, status } = await competitionService.deleteCompetition(id, ctx.phone);
         setResponse(ctx, data, status);
     }
     async setCompetitionNextRound(ctx) {
@@ -1219,65 +1730,10 @@ competitionRouter.get("/detail/:id", verifyToken, competitionController.getCompe
 competitionRouter.get("/self", verifyToken, competitionController.getSelfCompetition);
 competitionRouter.post("/create", verifyToken, competitionController.createCompetition);
 competitionRouter.post("/update", verifyToken, competitionController.updateCompetition);
+competitionRouter.post('/delete', verifyToken, competitionController.deleteCompetition);
 competitionRouter.post("/set/next", verifyToken, competitionController.setCompetitionNextRound);
 // 竞赛相关用户，比如发布时选择评委，报名时选择导师，学生
 competitionRouter.get("/user", verifyToken, competitionController.getCompetitionUser);
-
-let FileModel = class FileModel extends Model {
-};
-__decorate([
-    Column({
-        primaryKey: true,
-        autoIncrement: true,
-        allowNull: false,
-    }),
-    __metadata("design:type", Number)
-], FileModel.prototype, "id", void 0);
-__decorate([
-    Column({
-        allowNull: false,
-    }),
-    __metadata("design:type", String)
-], FileModel.prototype, "filename", void 0);
-__decorate([
-    Column({
-        allowNull: false,
-        unique: true,
-    }),
-    __metadata("design:type", String)
-], FileModel.prototype, "path", void 0);
-__decorate([
-    Column({
-        allowNull: false,
-    }),
-    __metadata("design:type", String)
-], FileModel.prototype, "destination", void 0);
-__decorate([
-    Column({
-        allowNull: false,
-    }),
-    __metadata("design:type", Number)
-], FileModel.prototype, "size", void 0);
-__decorate([
-    Column({
-        allowNull: false,
-    }),
-    __metadata("design:type", String)
-], FileModel.prototype, "originalname", void 0);
-__decorate([
-    Column({
-        allowNull: false,
-    }),
-    __metadata("design:type", String)
-], FileModel.prototype, "mimetype", void 0);
-FileModel = __decorate([
-    Table({
-        tableName: "file",
-        createdAt: false,
-        updatedAt: false,
-    })
-], FileModel);
-sequelize.addModels([FileModel]);
 
 class UploadService {
     async createFileRecord(file) {
@@ -1301,14 +1757,20 @@ class UploadService {
             });
         }
         else {
-            await FileModel.create({
-                originalname,
-                size,
-                destination,
-                path,
-                mimetype,
-                filename,
-            });
+            console.log("create");
+            try {
+                await FileModel.create({
+                    originalname,
+                    size,
+                    destination,
+                    path,
+                    mimetype,
+                    filename,
+                });
+            }
+            catch (e) {
+                console.log(e);
+            }
         }
         return serviceReturn({
             code: 200,
@@ -1374,12 +1836,27 @@ class UploadController {
             },
         });
     }
+    async uploadImg(ctx, next) {
+        await upload.single("img")(ctx, next);
+        if (ctx.file) {
+            await uploadService.createFileRecord(ctx.file);
+        }
+        setResponse(ctx, {
+            code: 200,
+            data: {
+                filename: ctx.req.saveFileName,
+                originalname: ctx.req.originalname,
+            },
+        });
+    }
     async getFile(ctx) {
         const { filename } = ctx.params;
         const file = await uploadService.getFile(filename);
         if (existsSync(file.path)) {
             const stream = createReadStream(file.path);
             ctx.type = file.mimetype;
+            ctx.set('Content-Length', String(file.size));
+            ctx.set('Accept-Ranges', "bytes");
             setResponse(ctx, stream, 200);
         }
         else {
@@ -1420,10 +1897,39 @@ var uploadController = errCatch(new UploadController());
 const uploadRouter = new Router();
 uploadRouter.get("/file/:filename", uploadController.getFile);
 uploadRouter.post("/upload/competition/file", verifyToken, uploadController.uploadFile);
+uploadRouter.post("/upload/competition/img", verifyToken, uploadController.uploadImg);
 uploadRouter.post("/upload/signup/work", verifyToken, uploadController.uploadWork);
 uploadRouter.post('/upload/signup/video', verifyToken, uploadController.uploadVideo);
 
 class SignUpService {
+    async processFileRecord(type, fileString, id, promiseList) {
+        const fileInfo = JSON.parse(fileString);
+        const record = await FileModel.findOne({
+            raw: true,
+            where: {
+                filename: fileInfo.filename,
+            },
+        });
+        if (!record)
+            return;
+        const { signUpIdList, filename } = record;
+        let newSignUpIdList = JSON.parse(signUpIdList || "[]");
+        if (type === "add") {
+            if (!newSignUpIdList.includes(id)) {
+                newSignUpIdList.push(id);
+            }
+        }
+        else {
+            newSignUpIdList = newSignUpIdList.filter((signUpId) => signUpId !== id);
+        }
+        promiseList.push(FileModel.update({
+            signUpIdList: JSON.stringify(newSignUpIdList),
+        }, {
+            where: {
+                filename,
+            },
+        }));
+    }
     async createSignUp({ competitionId, mode, leader, member, instructors, teamName, competitionName, work, video, }) {
         const competition = await CompetitionModel.findOne({
             raw: true,
@@ -1501,13 +2007,6 @@ class SignUpService {
                 video,
             });
             const signUpId = signUpMsg.dataValues.id;
-            if (work) {
-                JSON.parse(work);
-            }
-            if (video) {
-                JSON.parse(video);
-            }
-            // TODO更新User表
             const needUpdateList = await UserModel.findAll({
                 raw: true,
                 where: {
@@ -1542,6 +2041,13 @@ class SignUpService {
                     }));
                 }
             });
+            // 更新文件与报名关联
+            if (work) {
+                await this.processFileRecord("add", work, signUpId, promiseList);
+            }
+            if (video) {
+                await this.processFileRecord("add", video, signUpId, promiseList);
+            }
             await Promise.all(promiseList);
             return serviceReturn({
                 code: 200,
@@ -1765,6 +2271,14 @@ class SignUpService {
                     },
                 }));
             });
+            // 更新文件记录
+            const { work, video } = signUpInfo;
+            if (work) {
+                await this.processFileRecord("remove", work, signUpId, promiseList);
+            }
+            if (video) {
+                await this.processFileRecord("remove", video, signUpId, promiseList);
+            }
             promiseList.push(SignUpModel.destroy({
                 where: {
                     id: signUpId,
@@ -1870,27 +2384,12 @@ class SignUpService {
             });
         });
         // 删除文件记录以及文件
-        const [file, videoFile] = [work, video].map((item) => item && JSON.parse(item));
-        [file, videoFile].map(async (fileMsg) => {
-            if (fileMsg) {
-                const { filename } = fileMsg;
-                const fileInfo = await FileModel.findOne({
-                    raw: true,
-                    where: {
-                        filename,
-                    },
-                });
-                if (fileInfo) {
-                    const { path } = fileInfo;
-                    signUpController.deleteSignUpFile(path);
-                    promiseList.push(FileModel.destroy({
-                        where: {
-                            filename,
-                        },
-                    }));
-                }
-            }
-        });
+        if (work) {
+            await this.processFileRecord("remove", work, signUpId, promiseList);
+        }
+        if (video) {
+            await this.processFileRecord("remove", video, signUpId, promiseList);
+        }
         // 删除竞赛
         promiseList.push(SignUpModel.destroy({
             where: {
@@ -2111,14 +2610,36 @@ class SignUpService {
                 await processMemberOrInstructor("instructor", rawInstructors, instructors);
             }
             [
-                ["video", video],
-                ["name", teamName],
+                ["video", video || null],
+                ["name", teamName || null],
                 ["work", work],
             ].forEach(([key, val]) => {
-                if (val) {
-                    updateInfo[key] = val;
-                }
+                updateInfo[key] = val;
             });
+            // 文件处理
+            const rawWork = signUpInfo.work;
+            const rawVideo = signUpInfo.video;
+            for (const [raw, cur] of [
+                [rawWork, work],
+                [rawVideo, video],
+            ]) {
+                if (!raw && cur) {
+                    // 之前没有现在有
+                    await this.processFileRecord("add", cur, signUpId, promiseList);
+                }
+                if (raw && !cur) {
+                    // 之前有现在没有
+                    await this.processFileRecord("remove", raw, signUpId, promiseList);
+                }
+                if (raw && cur) {
+                    // 之前有现在也有
+                    if (raw !== cur) {
+                        // 前后不一致
+                        await this.processFileRecord("remove", raw, signUpId, promiseList);
+                        await this.processFileRecord("add", cur, signUpId, promiseList);
+                    }
+                }
+            }
             await Promise.all(promiseList);
             await SignUpModel.update({
                 ...updateInfo,
@@ -2199,6 +2720,9 @@ class SignUpService {
         };
         if (award !== "") {
             updateObj.award = award;
+        }
+        else {
+            updateObj.award = null;
         }
         await SignUpModel.update(updateObj, {
             where: {
@@ -2293,13 +2817,155 @@ signUpRouter.post("/update", verifyToken, signUpController.updateSignUpInfo);
 signUpRouter.post("/promote", verifyToken, signUpController.promoteSignUpBySignUpId);
 signUpRouter.post("/award", verifyToken, signUpController.awardSignUpBySignUpId);
 
+class UserService {
+    async getUserList(pageSize, offset, filter) {
+        const userList = await UserModel.findAndCountAll({
+            raw: true,
+            attributes: ["phone", "role", "createdAt", "updatedAt", "isDisable"],
+            order: [["createdAt", "DESC"]],
+            offset,
+            limit: pageSize,
+            where: {
+                role: {
+                    [Op.in]: [UserRole.student, UserRole.teacher],
+                },
+                phone: {
+                    [Op.like]: `%${filter}%`,
+                },
+            },
+        });
+        return serviceReturn({
+            code: 200,
+            data: {
+                list: userList.rows.map(({ phone, role, createdAt, updatedAt, isDisable }) => ({
+                    phone,
+                    role,
+                    isDisable,
+                    createdAt: formatTime(createdAt?.toString()),
+                    updatedAt: formatTime(updatedAt?.toString()),
+                })),
+                total: userList.count,
+            },
+        });
+    }
+    async updateUserIsDisable(updateUser, isDisable, opUser) {
+        const [opUserInfo, updateUserInfo] = await Promise.all([
+            UserModel.findOne({
+                raw: true,
+                attributes: ["role"],
+                where: {
+                    phone: opUser,
+                },
+            }),
+            UserModel.findOne({
+                raw: true,
+                where: {
+                    phone: updateUser,
+                },
+            }),
+        ]);
+        if (!updateUserInfo) {
+            return serviceReturn({
+                code: 400,
+                data: "修改的用户不存在",
+            });
+        }
+        if (opUserInfo?.role !== UserRole.admin) {
+            return serviceReturn({
+                code: 400,
+                data: "没有修改用户的权限",
+            });
+        }
+        await UserModel.update({
+            isDisable,
+        }, {
+            where: {
+                phone: updateUser,
+            },
+        });
+        return serviceReturn({
+            code: 200,
+            data: "更新成功",
+        });
+    }
+}
+var userService = errCatch(new UserService());
+
+class UserController {
+    async getUserList(ctx) {
+        const { pageSize, offset, filter } = ctx.query;
+        const { data, status } = await userService.getUserList(Number(pageSize), Number(offset), filter);
+        setResponse(ctx, data, status);
+    }
+    async updateIsDisable(ctx) {
+        const { isDisable, user } = ctx.request.body;
+        const opUser = ctx.phone;
+        const { status, data } = await userService.updateUserIsDisable(user, isDisable, opUser);
+        setResponse(ctx, data, status);
+    }
+}
+var userController = errCatch(new UserController());
+
+const userRouter = new Router({ prefix: "/user" });
+userRouter.get("/list", verifyToken, userController.getUserList);
+userRouter.post('/update/is-disable', verifyToken, userController.updateIsDisable);
+
+class SubscriptionService {
+    async subscribe(user, competitionId) {
+        const alreadySubscribe = await SubScriptionModel.findOne({
+            where: {
+                user,
+                competitionId,
+            },
+        });
+        if (alreadySubscribe) {
+            SubScriptionModel.destroy({
+                where: {
+                    competitionId,
+                    user,
+                },
+            });
+            return serviceReturn({
+                code: 200,
+                data: "取消订阅成功",
+            });
+        }
+        else {
+            await SubScriptionModel.create({
+                user,
+                competitionId,
+            });
+            return serviceReturn({
+                code: 200,
+                data: "订阅成功",
+            });
+        }
+    }
+}
+var subscriptionService = errCatch(new SubscriptionService());
+
+class SubscriptionController {
+    async subscribe(ctx) {
+        const user = ctx.phone;
+        const { competitionId } = ctx.request.body;
+        const { data, status } = await subscriptionService.subscribe(user, competitionId);
+        setResponse(ctx, data, status);
+    }
+}
+var subscriptionController = errCatch(new SubscriptionController());
+
+const subscriptionRouter = new Router({ prefix: '/subscription' });
+subscriptionRouter.post('/subscribe', verifyToken, subscriptionController.subscribe);
+
 var router = /*#__PURE__*/Object.freeze({
     __proto__: null,
     competitionRouter: competitionRouter,
     loginRouter: loginRouter,
     registerRouter: registerRouter$1,
     signUpRouter: signUpRouter,
-    uploadRouter: uploadRouter
+    subscriptionRouter: subscriptionRouter,
+    uploadRouter: uploadRouter,
+    userRouter: userRouter
 });
 
 const errorHandle = (err, ctx) => {

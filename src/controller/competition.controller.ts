@@ -8,14 +8,15 @@ import competitionService, {
 class CompetitionController {
   async getCompetitionList(ctx: Context, next: Next) {
     const { offset, size, level, name, status } = ctx.query;
-
+    const user = ctx.phone;
     const { status: resStatus, data } =
       await competitionService.getCompetitionList(
         Number(offset),
         Number(size),
         name as string,
         level as string,
-        status as string
+        status as string,
+        user
       );
 
     setResponse(ctx, data, resStatus);
@@ -72,10 +73,23 @@ class CompetitionController {
 
     const { data, status } = await competitionService.updateCompetition(
       param,
-      param.id!
+      param.id!,
+      ctx.phone
     );
     setResponse(ctx, data, status);
   }
+
+  async deleteCompetition(ctx: Context) {
+    const { id } = ctx.request.body as any;
+
+    const { data, status } = await competitionService.deleteCompetition(
+      id,
+      ctx.phone
+    );
+
+    setResponse(ctx, data, status);
+  }
+
   async setCompetitionNextRound(ctx: Context) {
     const { competitionId } = ctx.request.body as any;
 

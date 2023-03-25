@@ -59,8 +59,15 @@ export class CompetitionModel extends Model<Partial<CompetitionModel>> {
     allowNull: false,
   })
   declare workSubmissionEndTime: string;
-  @Column
+  @Column({
+    allowNull: true,
+  })
   declare files: string;
+
+  @Column({
+    allowNull: true,
+  })
+  declare imgs: string;
   @Column({
     allowNull: false,
   })

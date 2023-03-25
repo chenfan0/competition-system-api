@@ -27,3 +27,8 @@ export enum AlreadyProcess {
   yes = 1,
   no = 0,
 }
+
+export enum UserDisable {
+  yes = 1,
+  no = 0,
+}

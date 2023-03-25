@@ -20,11 +20,11 @@ export class SubScriptionModel extends Model<Partial<SubScriptionModel>> {
     allowNull: false,
     unique: true,
   })
-  declare userId: number;
+  declare user: string;
   @Column
-  declare createdAt?: string;
+  declare createdAt?: Date;
   @Column
-  declare updatedAt?: string;
+  declare updatedAt?: Date;
 }
 
 sequelize.addModels([SubScriptionModel]);

@@ -68,6 +68,19 @@ class UploadController {
       },
     });
   }
+  async uploadImg(ctx: Context, next: Next) {
+    await upload.single("img")(ctx, next);
+    if (ctx.file) {
+      await uploadService.createFileRecord(ctx.file);
+    }
+    setResponse(ctx, {
+      code: 200,
+      data: {
+        filename: (ctx.req as any).saveFileName,
+        originalname: (ctx.req as any).originalname,
+      },
+    });
+  }
 
   async getFile(ctx: Context) {
     const { filename } = ctx.params;
@@ -77,6 +90,8 @@ class UploadController {
     if (existsSync(file!.path)) {
       const stream = createReadStream(file!.path);
       ctx.type = file!.mimetype;
+      ctx.set('Content-Length', String(file!.size))
+      ctx.set('Accept-Ranges', "bytes")
       setResponse(ctx, stream, 200);
     } else {
       setResponse(ctx, {
@@ -87,6 +102,7 @@ class UploadController {
 
   async uploadWork(ctx: Context, next: Next) {
     await upload.single("work")(ctx, next);
+
     if (ctx.file) {
       await uploadService.createFileRecord(ctx.file);
     }
