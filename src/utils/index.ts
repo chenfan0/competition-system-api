@@ -3,6 +3,10 @@ import dayjs from "dayjs";
 import { Context } from "koa";
 import nodeSchedule from "node-schedule";
 import { CompetitionModel } from "../model/CompetitionModel";
+import { SignUpStatus, CompetitionStatus } from "../constant/index";
+import { SubScriptionModel } from "../model/SubscriptionModel";
+import { Op } from "sequelize";
+import { sendSubscriptionSms } from "./sms";
 
 export const setResponse = (ctx: Context, body: any, status = 200) => {
   ctx.status = status;
@@ -101,9 +105,15 @@ export function getCompetitionStatus(
 }
 
 export async function syncCompetitionStatus() {
+
   try {
     const competitionList = await CompetitionModel.findAll({
       raw: true,
+      where: {
+        status: {
+          [Op.not]: CompetitionStatus.end,
+        },
+      },
     });
     const needToSyncList = competitionList.filter((competition) => {
       const {
@@ -127,7 +137,19 @@ export async function syncCompetitionStatus() {
       return true;
     });
 
+    const competitionIdToNameMap = new Map<number, string>();
+    const signUpingIds: number[] = [];
+    const uploadingIds: number[] = [];
+
     for (const needSync of needToSyncList) {
+
+      competitionIdToNameMap.set(Number(needSync.id), needSync.name);
+      if (needSync.status === CompetitionStatus.signUping) {
+        signUpingIds.push(needSync.id);
+      }
+      if (needSync.status === CompetitionStatus.uploading) {
+        uploadingIds.push(needSync.id);
+      }
       CompetitionModel.update(
         {
           status: needSync.status,
@@ -139,15 +161,56 @@ export async function syncCompetitionStatus() {
         }
       );
     }
+    const [signUpingUsers, uploadingUsers] = await Promise.all([
+      SubScriptionModel.findAll({
+        raw: true,
+        where: {
+          competitionId: {
+            [Op.in]: signUpingIds,
+          },
+        },
+      }),
+      SubScriptionModel.findAll({
+        raw: true,
+        where: {
+          competitionId: {
+            [Op.in]: uploadingIds,
+          },
+        },
+      }),
+    ]);
+    const signUpCompetitionName: Record<string, string[]> = {};
+    const uploadCompetitionName: Record<string, string[]> = {};
+    signUpingUsers.forEach((item) => {
+      const name = competitionIdToNameMap.get(Number(item.competitionId))!;
+      const val = signUpCompetitionName[name] || [];
+      val.push(item.user);
+      signUpCompetitionName[name] = val;
+    });
+    uploadingUsers.forEach((item) => {
+      const name = competitionIdToNameMap.get(Number(item.competitionId))!;
+      const val = uploadCompetitionName[name] || [];
+      val.push(item.user);
+      uploadCompetitionName[name] = val;
+    });
+    const signUpKeys = Object.keys(signUpCompetitionName);
+    const uploadKeys = Object.keys(uploadCompetitionName);
+
+    for (const key of signUpKeys) {
+      sendSubscriptionSms(key, "报名进行中", signUpCompetitionName[key]);
+    }
+    for (const key of uploadKeys) {
+      sendSubscriptionSms(key, "作品上传中", uploadCompetitionName[key]);
+    }
   } catch (e) {
-    console.log(e);
+    console.log(e, "err");
   }
 }
 
-export function getDiff(prev: string[], cur: string[]) {
-  const newMember: string[] = [];
-  const removeMember: string[] = [];
-  const immutableMember: string[] = [];
+export function getDiff<T extends any[]>(prev: T, cur: T) {
+  const newMember = [] as unknown as T;
+  const removeMember = [] as unknown as T;
+  const immutableMember = [] as unknown as T;
   for (const raw of prev) {
     if (!cur.includes(raw)) {
       removeMember.push(raw);

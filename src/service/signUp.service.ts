@@ -8,6 +8,7 @@ import { errCatch, serviceReturn } from "../utils";
 import { UserRole, AlreadyProcess, CompetitionStatus } from "../constant/index";
 import { getDiff } from "../utils/index";
 import { FileModel } from "../model/FileModel";
+import { sendSuccessSms, sendCancelCompetitionSms } from "../utils/sms";
 
 interface SignUpInfo {
   competitionId: number;
@@ -213,6 +214,12 @@ class SignUpService {
       }
 
       await Promise.all(promiseList);
+      try {
+        const a: any = {};
+        console.log(a());
+      } catch (e: any) {
+        console.log(e.stack);
+      }
       return serviceReturn({
         code: 200,
         data:
@@ -401,6 +408,7 @@ class SignUpService {
             }
           )
         );
+        sendSuccessSms(signUpInfo.competitionName, totalTeamMember);
         await Promise.all(promiseList);
       }
       return serviceReturn({
@@ -508,6 +516,9 @@ class SignUpService {
           },
         })
       );
+      sendCancelCompetitionSms(signUpInfo.competitionName, user, [
+        resolveMember,
+      ]);
       await Promise.all(promiseList);
       return serviceReturn({ code: 200, data: "拒绝成功" });
     });
@@ -1013,7 +1024,9 @@ class SignUpService {
   async getSignUpListByCompetitionId(
     competitionId: number,
     user: string,
-    alreadyProcess: number
+    alreadyProcess: number,
+    offset: number,
+    pageSize: number
   ) {
     const competitionDetail = await CompetitionModel.findOne({
       raw: true,
@@ -1054,6 +1067,8 @@ class SignUpService {
     const signUpList = await SignUpModel.findAndCountAll({
       raw: true,
       where: whereOptions,
+      limit: pageSize,
+      offset,
     });
 
     return serviceReturn({
@@ -1091,7 +1106,7 @@ class SignUpService {
     if (award !== "") {
       updateObj.award = award;
     } else {
-      updateObj.award = null as any
+      updateObj.award = null as any;
     }
     await SignUpModel.update(updateObj, {
       where: {

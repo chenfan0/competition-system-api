@@ -66,12 +66,14 @@ class SignUpController {
 
   async getSignUpListByCompetitionId(ctx: Context) {
     const { competitionId } = ctx.params;
-    const user = ctx.phone
-    const { alreadyProcess } = ctx.query;
+    const user = ctx.phone;
+    const { alreadyProcess, offset, pageSize } = ctx.query;
     const { status, data } = await signUpService.getSignUpListByCompetitionId(
       competitionId,
       user,
-      Number(alreadyProcess)
+      Number(alreadyProcess),
+      Number(offset),
+      Number(pageSize)
     );
 
     setResponse(ctx, data, status);

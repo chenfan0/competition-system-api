@@ -28,6 +28,23 @@ class UserController {
 
     setResponse(ctx, data, status);
   }
+
+  async updateUserInterested(ctx: Context) {
+    const { interested } = ctx.request.body as { interested: number[] };
+    const user = ctx.phone;
+    const { status, data } = await userService.updateUserInterested(
+      interested,
+      user
+    );
+
+    setResponse(ctx, data, status);
+  }
+
+  async getUserAwardList(ctx: Context) {
+    const { status, data } = await userService.getUserAwardList(ctx.phone);
+
+    setResponse(ctx, data, status);
+  }
 }
 
 export default errCatch(new UserController());

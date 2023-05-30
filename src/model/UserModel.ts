@@ -60,9 +60,17 @@ export class UserModel extends Model<Partial<UserModel>> {
   })
   declare isDisable: number;
   @Column({
-    allowNull: false,
+    allowNull: true,
   })
   declare subscriptionList: string;
+  @Column({
+    allowNull: true,
+  })
+  declare interested: string;
+  @Column({
+    allowNull: true,
+  })
+  declare avatar: string;
 }
 
 sequelize.addModels([UserModel]);

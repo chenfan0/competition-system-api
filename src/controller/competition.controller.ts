@@ -99,6 +99,50 @@ class CompetitionController {
 
     setResponse(ctx, data, status);
   }
+
+  async getRecommendCompetition(ctx: Context) {
+    const user = ctx.phone;
+    const { status, data } = await competitionService.getRecommendCompetition(
+      user
+    );
+
+    setResponse(ctx, data, status);
+  }
+
+  async getCompetitionLevelData(ctx: Context) {
+    const { status, data } = await competitionService.getCompetitionLevelData();
+    setResponse(ctx, data, status);
+  }
+
+  async getCompetitionStatusData(ctx: Context) {
+    const { status, data } =
+      await competitionService.getCompetitionStatusData();
+    setResponse(ctx, data, status);
+  }
+
+  async getCompetitionTagData(ctx: Context) {
+    const { status, data } = await competitionService.getCompetitionTagData();
+    setResponse(ctx, data, status);
+  }
+
+  async getAwardsExcel(ctx: Context) {
+    const { competitionId } = ctx.query as any;
+    const { status, data } = await competitionService.getAwardsExcel(
+      competitionId
+    );
+
+
+      
+    if (typeof data.data === "string") {
+      setResponse(ctx, data, status);
+    } else {
+      ctx.type =
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      ctx.response.attachment(`${data.data.name}.xlsx`);
+      // ctx.response.attachment(`${(data as any).name}.xlsx`);
+      ctx.body = data.data.buffer
+    }
+  }
 }
 
 export default errCatch(new CompetitionController());

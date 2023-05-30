@@ -88,6 +88,10 @@ export class CompetitionModel extends Model<Partial<CompetitionModel>> {
     allowNull: true,
   })
   declare signUpNums: string;
+  @Column({
+    allowNull: true,
+  })
+  declare tags: string;
   @Column
   declare createdAt: Date;
   @Column

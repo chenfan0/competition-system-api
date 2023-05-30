@@ -7,6 +7,7 @@ import multer from "@koa/multer";
 import { errCatch, handleFileName, setResponse } from "../utils";
 import { FileModel } from "../model/FileModel";
 import uploadService from "../service/upload.service";
+import userService from "../service/user.service";
 
 const distPath = resolve(process.cwd(), "./upload");
 
@@ -68,7 +69,7 @@ class UploadController {
       },
     });
   }
-  async uploadImg(ctx: Context, next: Next) {
+  async uploadCompetitionImg(ctx: Context, next: Next) {
     await upload.single("img")(ctx, next);
     if (ctx.file) {
       await uploadService.createFileRecord(ctx.file);
@@ -90,8 +91,8 @@ class UploadController {
     if (existsSync(file!.path)) {
       const stream = createReadStream(file!.path);
       ctx.type = file!.mimetype;
-      ctx.set('Content-Length', String(file!.size))
-      ctx.set('Accept-Ranges', "bytes")
+      ctx.set("Content-Length", String(file!.size));
+      ctx.set("Accept-Ranges", "bytes");
       setResponse(ctx, stream, 200);
     } else {
       setResponse(ctx, {
@@ -100,7 +101,7 @@ class UploadController {
     }
   }
 
-  async uploadWork(ctx: Context, next: Next) {
+  async uploadSignUpWork(ctx: Context, next: Next) {
     await upload.single("work")(ctx, next);
 
     if (ctx.file) {
@@ -115,11 +116,26 @@ class UploadController {
     });
   }
 
-  async uploadVideo(ctx: Context, next: Next) {
+  async uploadSignUpVideo(ctx: Context, next: Next) {
     await upload.single("video")(ctx, next);
     if (ctx.file) {
       await uploadService.createFileRecord(ctx.file);
     }
+    setResponse(ctx, {
+      code: 200,
+      data: {
+        filename: (ctx.req as any).saveFileName,
+        originalname: (ctx.req as any).originalname,
+      },
+    });
+  }
+
+  async uploadUserAvatar(ctx: Context, next: Next) {
+    await upload.single("avatar")(ctx, next);
+    if (ctx.file) {
+      await uploadService.createFileRecord(ctx.file);
+    }
+    await userService.updateUserAvatar(ctx.phone, (ctx.req as any).saveFileName)
     setResponse(ctx, {
       code: 200,
       data: {

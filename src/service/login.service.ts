@@ -9,7 +9,7 @@ class LoginService {
       where: {
         phone,
       },
-      attributes: ["password", "role", 'isDisable'],
+      attributes: ["password", "role", "isDisable", "interested", "avatar"],
     });
     if (!isPhoneExist) {
       return serviceReturn({
@@ -35,6 +35,8 @@ class LoginService {
       data: {
         phone,
         role: isPhoneExist.role,
+        interested: JSON.parse(isPhoneExist.interested || "[]"),
+        avatar: isPhoneExist.avatar,
       },
     });
   }

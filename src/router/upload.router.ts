@@ -12,8 +12,10 @@ uploadRouter.get(
 uploadRouter.post("/upload/competition/file", verifyToken, uploadController.uploadFile);
 
 
-uploadRouter.post("/upload/competition/img", verifyToken, uploadController.uploadImg);
+uploadRouter.post("/upload/competition/img", verifyToken, uploadController.uploadCompetitionImg);
 
-uploadRouter.post("/upload/signup/work", verifyToken, uploadController.uploadWork);
+uploadRouter.post("/upload/signup/work", verifyToken, uploadController.uploadSignUpWork);
 
-uploadRouter.post('/upload/signup/video', verifyToken, uploadController.uploadVideo)
+uploadRouter.post('/upload/signup/video', verifyToken, uploadController.uploadSignUpVideo)
+
+uploadRouter.post('/upload/user/avatar', verifyToken, uploadController.uploadUserAvatar)

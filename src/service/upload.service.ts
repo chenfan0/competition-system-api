@@ -27,7 +27,6 @@ class UploadService {
         }
       );
     } else {
-      console.log("create");
 
       try {
         await FileModel.create({

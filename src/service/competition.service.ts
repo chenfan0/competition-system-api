@@ -3,11 +3,12 @@ import {
   errCatch,
   formatTime,
   getCompetitionStatus,
+  getDiff,
   serviceReturn,
 } from "../utils";
 import { Op } from "sequelize";
 import { UserModel } from "../model/UserModel";
-import { UserRole } from "../constant";
+import { CompetitionMode, UserRole } from "../constant";
 import { sequelize } from "../connect";
 import { SignUpModel } from "../model/SignUpModel";
 import {
@@ -16,8 +17,11 @@ import {
   SignUpStatus,
 } from "../constant/index";
 import { FileModel } from "../model/FileModel";
-import { getDiff } from "../utils/index";
 import { SubScriptionModel } from "../model/SubscriptionModel";
+import { TagCompetitionMapModel } from "../model/TagCompetitionMapModel";
+import { TagModel } from "../model/TagModel";
+
+import ExcelJS from "exceljs";
 
 export interface CreateCompetitionDataType {
   id?: number;
@@ -31,6 +35,7 @@ export interface CreateCompetitionDataType {
   registrationTime: [string, string];
   workSubmissionTime: [string, string];
   judges: string[];
+  tags: number[];
   files: string[];
   imgs: string[];
   signUpNums?: number[];
@@ -44,7 +49,8 @@ type FieldType =
   | "instructoredList"
   | "instructoringList"
   | "judgementList"
-  | "releaseList";
+  | "releaseList"
+  | "subscriptionList";
 
 class CompetitionService {
   async getCompetitionList(
@@ -139,6 +145,20 @@ class CompetitionService {
         },
       }),
     ]);
+    const tags = JSON.parse(competitionDetail?.tags || "[]");
+    const tagNameList = (
+      await TagModel.findAll({
+        raw: true,
+        attributes: ["name"],
+        where: {
+          id: {
+            [Op.in]: tags,
+          },
+        },
+      })
+    ).map((tag) => tag.name);
+    console.log(tagNameList);
+
     const {
       registrationStartTime,
       registrationEndTime,
@@ -238,6 +258,7 @@ class CompetitionService {
         work,
         instructors,
         member,
+        tags: tagNameList,
       },
     });
   }
@@ -288,6 +309,7 @@ class CompetitionService {
       registrationTime,
       workSubmissionTime,
       judges,
+      tags,
       files,
       imgs,
       signUpNums,
@@ -324,6 +346,7 @@ class CompetitionService {
         workSubmissionStartTime,
         workSubmissionEndTime,
         judges: JSON.stringify(judges),
+        tags: JSON.stringify(tags),
         files: JSON.stringify(files),
         imgs: JSON.stringify(imgs),
         opUser,
@@ -408,6 +431,14 @@ class CompetitionService {
           )
         );
       });
+      tags.forEach((tagId) => {
+        promiseList.push(
+          TagCompetitionMapModel.create({
+            competitionId,
+            tagId,
+          })
+        );
+      });
       await Promise.all(promiseList);
       return serviceReturn({
         code: 200,
@@ -444,7 +475,6 @@ class CompetitionService {
         data: "当前修改的竞赛不存在",
       });
     }
-    console.log(rawCompetition.opUser, user);
     if (userInfo?.role !== UserRole.admin && rawCompetition.opUser !== user) {
       return serviceReturn({
         code: 400,
@@ -453,6 +483,7 @@ class CompetitionService {
     }
 
     const rawJudges = JSON.parse(rawCompetition.judges || "[]") as string[];
+    const rawTags = JSON.parse(rawCompetition.tags || "[]") as number[];
     const {
       name,
       description,
@@ -464,6 +495,7 @@ class CompetitionService {
       registrationTime,
       workSubmissionTime,
       judges,
+      tags,
       files,
       imgs,
       signUpNums,
@@ -513,6 +545,26 @@ class CompetitionService {
         }),
       ]);
       const promiseList: Promise<unknown>[] = [];
+      const newTags = tags || [];
+      const [newAddTags, removeTags] = getDiff(rawTags, newTags);
+      newAddTags.forEach((tagId) => {
+        promiseList.push(
+          TagCompetitionMapModel.create({
+            competitionId: data.id,
+            tagId,
+          })
+        );
+      });
+      promiseList.push(
+        TagCompetitionMapModel.destroy({
+          where: {
+            tagId: {
+              [Op.in]: removeTags,
+            },
+            competitionId: data.id,
+          },
+        })
+      );
       (
         [
           [addUserList, "add"],
@@ -560,6 +612,7 @@ class CompetitionService {
             workSubmissionStartTime,
             workSubmissionEndTime,
             judges: JSON.stringify(judges),
+            tags: JSON.stringify(tags),
             files: JSON.stringify(files),
             imgs: JSON.stringify(imgs),
             signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
@@ -702,6 +755,34 @@ class CompetitionService {
         list.registrationStartTime = formatTime(list.registrationStartTime);
         list.registrationEndTime = formatTime(list.registrationEndTime);
         (list as any).subscription = subscriptionSet.has(list.id);
+      });
+      return serviceReturn({
+        code: 200,
+        data: {
+          list: returnList.rows,
+          count: returnList.count,
+        },
+      });
+    }
+    if (field === "subscriptionList") {
+      const returnList = await CompetitionModel.findAndCountAll({
+        raw: true,
+        order: [["createdAt", "DESC"]],
+        where: {
+          id: {
+            [Op.in]: [...subscriptionSet],
+          },
+          name: {
+            [Op.like]: `%${competitionName}%`,
+          },
+        },
+        offset,
+        limit: pageSize,
+      });
+      (returnList.rows as CompetitionModel[]).forEach((list) => {
+        list.registrationStartTime = formatTime(list.registrationStartTime);
+        list.registrationEndTime = formatTime(list.registrationEndTime);
+        (list as any).subscription = true;
       });
       return serviceReturn({
         code: 200,
@@ -928,7 +1009,8 @@ class CompetitionService {
 
     const res = sequelize.transaction(async () => {
       const promiseList: Promise<unknown>[] = [];
-      const { judges, files, imgs } = competitionDetail!;
+      const { judges, files, imgs, tags } = competitionDetail!;
+      const tagIdList = JSON.parse(tags || "[]") as number[];
       const _judges = JSON.parse(judges || "[]") as string[];
       const userList: string[] = [..._judges];
 
@@ -1188,6 +1270,17 @@ class CompetitionService {
           )
         );
       }
+      // 删除标签
+      promiseList.push(
+        TagCompetitionMapModel.destroy({
+          where: {
+            competitionId: {
+              [Op.in]: tagIdList,
+            },
+          },
+        })
+      );
+
       promiseList.push(
         CompetitionModel.destroy({
           where: {
@@ -1210,6 +1303,230 @@ class CompetitionService {
       });
     });
     return res;
+  }
+
+  async getRecommendCompetition(user: string) {
+    const userDetail = await UserModel.findOne({
+      attributes: ["interested"],
+      where: {
+        phone: user,
+      },
+      raw: true,
+    });
+    const recommendId = JSON.parse(userDetail?.interested || "[]") as number[];
+
+    const recommendCompetitionIdList = (
+      await TagCompetitionMapModel.findAll({
+        raw: true,
+        attributes: ["competitionId"],
+        order: [["createdAt", "DESC"]],
+        where: {
+          tagId: {
+            [Op.in]: recommendId,
+          },
+        },
+      })
+    ).map((item) => item.competitionId);
+    const [competitionList, defaultList, subscriptionList] = await Promise.all([
+      CompetitionModel.findAll({
+        raw: true,
+        order: [["createdAt", "DESC"]],
+        where: {
+          id: {
+            [Op.in]: recommendCompetitionIdList,
+          },
+        },
+        limit: 5,
+      }),
+      CompetitionModel.findAll({
+        raw: true,
+        order: [["createdAt", "DESC"]],
+        limit: 5,
+      }),
+      SubScriptionModel.findAll({
+        raw: true,
+        attributes: ["competitionId"],
+        where: {
+          user,
+        },
+      }),
+    ]);
+    const subscriptionSet = new Set<number>(
+      subscriptionList.map((item) => item.competitionId)
+    );
+    const [returnList, defaultReturnList] = [competitionList, defaultList].map(
+      (list) => {
+        return list.map((item) => {
+          const {
+            name,
+            level,
+            id,
+            address,
+            registrationStartTime,
+            registrationEndTime,
+            status,
+            workSubmissionStartTime,
+            workSubmissionEndTime,
+          } = item;
+          return {
+            ...item,
+            id,
+            name,
+            level,
+            address,
+            registrationStartTime: formatTime(registrationStartTime),
+            registrationEndTime: formatTime(registrationEndTime),
+            workSubmissionStartTime: formatTime(workSubmissionStartTime),
+            workSubmissionEndTime: formatTime(workSubmissionEndTime),
+            status,
+            subscription: subscriptionSet.has(id),
+          };
+        });
+      }
+    );
+
+    return serviceReturn({
+      code: 200,
+      data: {
+        list: returnList.length ? returnList : defaultReturnList,
+      },
+    });
+  }
+
+  async getCompetitionLevelData() {
+    const competitionDetailList = await CompetitionModel.findAll({
+      raw: true,
+      attributes: ["level"],
+    });
+    const competitionLevelData = [
+      { value: 0, name: "国家级" },
+      { value: 0, name: "省级" },
+      { value: 0, name: "市级" },
+      { value: 0, name: "校级" },
+      { value: 0, name: "院级" },
+    ];
+    competitionDetailList.forEach((detail) => {
+      competitionLevelData[Number(detail.level)].value += 1;
+    });
+    return serviceReturn({
+      code: 200,
+      data: competitionLevelData,
+    });
+  }
+
+  async getCompetitionStatusData() {
+    const keys = [
+      "竞赛未开始",
+      "报名进行中",
+      "等待开放作品提交",
+      "作品上传中",
+      "评委评判中",
+      "竞赛已结束",
+    ];
+    const values = new Array(keys.length).fill(0);
+    const competitionStatusList = await CompetitionModel.findAll({
+      raw: true,
+      attributes: ["status"],
+    });
+    competitionStatusList.forEach((item) => (values[item.status] += 1));
+
+    return serviceReturn({
+      code: 200,
+      data: {
+        keys,
+        values,
+      },
+    });
+  }
+
+  async getCompetitionTagData() {
+    const tagList = await TagModel.findAll({
+      raw: true,
+    });
+    const tagIdToTagNameMap: Record<string, string> = {};
+    const tagNameMap: Record<string, number> = {};
+    tagList.forEach((tag) => (tagIdToTagNameMap[tag.id] = tag.name));
+    const competitionTagList = await TagCompetitionMapModel.findAll({
+      raw: true,
+    });
+    competitionTagList.forEach((item) => {
+      const tagName = tagIdToTagNameMap[item.tagId];
+      const val = tagNameMap[tagName] || 0;
+      tagNameMap[tagName] = val + 1;
+    });
+    const returnList: { value: number; name: string }[] = [];
+    const tagNames = Object.keys(tagNameMap);
+    for (const tagName of tagNames) {
+      returnList.push({
+        value: tagNameMap[tagName],
+        name: tagName,
+      });
+    }
+    return serviceReturn({
+      code: 200,
+      data: returnList.filter((item) => item.value !== 0),
+    });
+  }
+
+  async getAwardsExcel(competitionId: string) {
+    const competition = await CompetitionModel.findOne({
+      raw: true,
+      attributes: ["status", "name"],
+      where: {
+        id: competitionId,
+      },
+    });
+    if (competition?.status !== CompetitionStatus.end) {
+      return serviceReturn({
+        code: 400,
+        data: "当前阶段无法生成excel",
+      });
+    }
+
+    const signUpList = await SignUpModel.findAll({
+      raw: true,
+      where: {
+        competitionId,
+      },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Sheet 1");
+
+    // 设置首行的标题
+    console.log(signUpList);
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.getCell(1).value = "成员";
+    headerRow.getCell(2).value = "指导老师";
+    headerRow.getCell(3).value = "竞赛轮次";
+    headerRow.getCell(4).value = "获得奖项";
+
+    // 添加数据行
+
+    try {
+      signUpList.forEach((signUpInfo, index) => {
+        const row = worksheet.getRow(index + 2);
+        row.getCell(1).value =
+          signUpInfo.leader + JSON.parse(signUpInfo.member || "[]").join(",");
+        row.getCell(2).value = JSON.parse(signUpInfo.instructors || "[]").join(",");
+        row.getCell(3).value = signUpInfo.currentRound;
+        row.getCell(4).value = signUpInfo.award || "未获奖";
+      });
+    } catch(e) {
+      console.log(e);
+      
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    return serviceReturn({
+      code: 200,
+      data: {
+        name: competition?.name,
+        buffer,
+      },
+    });
   }
 }
 

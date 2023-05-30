@@ -43,9 +43,19 @@ competitionRouter.post(
   competitionController.setCompetitionNextRound
 );
 
+competitionRouter.get('/recommend', verifyToken, competitionController.getRecommendCompetition)
+
+competitionRouter.get('/level', verifyToken, competitionController.getCompetitionLevelData)
+
+competitionRouter.get('/status', verifyToken, competitionController.getCompetitionStatusData)
+
+competitionRouter.get('/tag', verifyToken, competitionController.getCompetitionTagData)
+
 // 竞赛相关用户，比如发布时选择评委，报名时选择导师，学生
 competitionRouter.get(
   "/user",
   verifyToken,
   competitionController.getCompetitionUser
 );
+
+competitionRouter.get("/excel", verifyToken, competitionController.getAwardsExcel)

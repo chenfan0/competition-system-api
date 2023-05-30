@@ -2,6 +2,7 @@ import Koa from "koa";
 import Router from "koa-router";
 import bodyParser from "koa-bodyparser";
 import cors from "@koa/cors";
+import svgCaptcha from 'svg-captcha'
 
 import * as router from "./router";
 import { errorHandle } from "./err.handle";
@@ -21,8 +22,9 @@ app.use(cors());
 app.use(bodyParser());
 registerRouter(app, router);
 
-app.on("error", errorHandle);
 
+
+app.on("error", errorHandle);
 app.listen(8080, () => {
   schedule(syncCompetitionStatus);
   console.log("running");

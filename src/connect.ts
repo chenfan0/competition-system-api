@@ -1,7 +1,7 @@
 import { Sequelize } from "sequelize-typescript";
 
-export const sequelize = new Sequelize("cmp", "root", "c13005261761F", {
-  host: "81.71.36.158",
+export const sequelize = new Sequelize("table name", "user", "password", {
+  host: "",
   dialect: "mysql",
   timezone: '+08:00'
 });

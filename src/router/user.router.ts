@@ -7,3 +7,7 @@ export const userRouter = new Router({ prefix: "/user" });
 userRouter.get("/list", verifyToken, userController.getUserList);
 
 userRouter.post('/update/is-disable', verifyToken, userController.updateIsDisable)
+
+userRouter.post('/update/interested', verifyToken, userController.updateUserInterested)
+
+userRouter.get('/award/list', verifyToken, userController.getUserAwardList)

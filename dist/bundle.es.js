@@ -10,6 +10,9 @@ import dayjs from 'dayjs';
 import nodeSchedule from 'node-schedule';
 import { Sequelize, Column, Table, Model } from 'sequelize-typescript';
 import { Op } from 'sequelize';
+import tencentcloud from 'tencentcloud-sdk-nodejs';
+import svgCaptcha from 'svg-captcha';
+import ExcelJS from 'exceljs';
 import multer from '@koa/multer';
 import { existsSync as existsSync$1, rmSync } from 'fs';
 
@@ -177,6 +180,12 @@ __decorate([
     __metadata("design:type", String)
 ], CompetitionModel.prototype, "signUpNums", void 0);
 __decorate([
+    Column({
+        allowNull: true,
+    }),
+    __metadata("design:type", String)
+], CompetitionModel.prototype, "tags", void 0);
+__decorate([
     Column,
     __metadata("design:type", Date)
 ], CompetitionModel.prototype, "createdAt", void 0);
@@ -190,6 +199,205 @@ CompetitionModel = __decorate([
     })
 ], CompetitionModel);
 sequelize.addModels([CompetitionModel]);
+
+var UserRole;
+(function (UserRole) {
+    UserRole[UserRole["student"] = 0] = "student";
+    UserRole[UserRole["teacher"] = 1] = "teacher";
+    UserRole[UserRole["admin"] = 2] = "admin";
+})(UserRole || (UserRole = {}));
+var CompetitionMode;
+(function (CompetitionMode) {
+    CompetitionMode[CompetitionMode["singe"] = 0] = "singe";
+    CompetitionMode[CompetitionMode["team"] = 1] = "team";
+})(CompetitionMode || (CompetitionMode = {}));
+var SignUpStatus;
+(function (SignUpStatus) {
+    SignUpStatus[SignUpStatus["pending"] = 1] = "pending";
+    SignUpStatus[SignUpStatus["fulfilled"] = 0] = "fulfilled";
+})(SignUpStatus || (SignUpStatus = {}));
+var CompetitionStatus;
+(function (CompetitionStatus) {
+    CompetitionStatus[CompetitionStatus["beforeSignUp"] = 0] = "beforeSignUp";
+    CompetitionStatus[CompetitionStatus["signUping"] = 1] = "signUping";
+    CompetitionStatus[CompetitionStatus["waitUpload"] = 2] = "waitUpload";
+    CompetitionStatus[CompetitionStatus["uploading"] = 3] = "uploading";
+    CompetitionStatus[CompetitionStatus["waitResult"] = 4] = "waitResult";
+    CompetitionStatus[CompetitionStatus["end"] = 5] = "end";
+})(CompetitionStatus || (CompetitionStatus = {}));
+var AlreadyProcess;
+(function (AlreadyProcess) {
+    AlreadyProcess[AlreadyProcess["yes"] = 1] = "yes";
+    AlreadyProcess[AlreadyProcess["no"] = 0] = "no";
+})(AlreadyProcess || (AlreadyProcess = {}));
+var UserDisable;
+(function (UserDisable) {
+    UserDisable[UserDisable["yes"] = 1] = "yes";
+    UserDisable[UserDisable["no"] = 0] = "no";
+})(UserDisable || (UserDisable = {}));
+
+let SubScriptionModel = class SubScriptionModel extends Model {
+};
+__decorate([
+    Column({
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false,
+    }),
+    __metadata("design:type", Number)
+], SubScriptionModel.prototype, "id", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+        unique: true
+    }),
+    __metadata("design:type", Number)
+], SubScriptionModel.prototype, "competitionId", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+        unique: true,
+    }),
+    __metadata("design:type", String)
+], SubScriptionModel.prototype, "user", void 0);
+__decorate([
+    Column,
+    __metadata("design:type", Date)
+], SubScriptionModel.prototype, "createdAt", void 0);
+__decorate([
+    Column,
+    __metadata("design:type", Date)
+], SubScriptionModel.prototype, "updatedAt", void 0);
+SubScriptionModel = __decorate([
+    Table({
+        tableName: "subscription",
+    })
+], SubScriptionModel);
+sequelize.addModels([SubScriptionModel]);
+
+const smsClient = tencentcloud.sms.v20210111.Client;
+const templateIdMap = {
+    signUpSuccess: "1748896",
+    cancelCompetition: "1748895",
+    subscriptionCompetition: "1751611",
+    register: "1751588",
+};
+const client = new smsClient({
+    credential: {
+        /* 必填：腾讯云账户密钥对secretId，secretKey。
+         * 这里采用的是从环境变量读取的方式，需要在环境变量中先设置这两个值。
+         * 你也可以直接在代码中写死密钥对，但是小心不要将代码复制、上传或者分享给他人，
+         * 以免泄露密钥对危及你的财产安全。
+         * CAM密匙查询: https://console.cloud.tencent.com/cam/capi */
+        secretId: "AKIDfBUgfP6qPl5FsKqBJDzY2LApHVVHnKfn",
+        secretKey: "xgDcnjXyKXXVIsb9Uap4A740HOJ9nFSR",
+    },
+    /* 必填：地域信息，可以直接填写字符串ap-guangzhou，或者引用预设的常量 */
+    region: "ap-guangzhou",
+    /* 非必填:
+     * 客户端配置对象，可以指定超时时间等配置 */
+    profile: {
+        /* SDK默认用TC3-HMAC-SHA256进行签名，非必要请不要修改这个字段 */
+        signMethod: "HmacSHA256",
+        httpProfile: {
+            /* SDK默认使用POST方法。
+             * 如果你一定要使用GET方法，可以在这里设置。GET方法无法处理一些较大的请求 */
+            reqMethod: "POST",
+            /* SDK有默认的超时时间，非必要请不要进行调整
+             * 如有需要请在代码中查阅以获取最新的默认值 */
+            reqTimeout: 30,
+            /**
+             * SDK会自动指定域名。通常是不需要特地指定域名的，但是如果你访问的是金融区的服务
+             * 则必须手动指定域名，例如sms的上海金融区域名： sms.ap-shanghai-fsi.tencentcloudapi.com
+             */
+            endpoint: "sms.tencentcloudapi.com",
+        },
+    },
+});
+/* 请求参数，根据调用的接口和实际情况，可以进一步设置请求参数
+ * 属性可能是基本类型，也可能引用了另一个数据结构
+ * 推荐使用IDE进行开发，可以方便的跳转查阅各个接口和数据结构的文档说明 */
+const defaultParams = {
+    /* 短信应用ID: 短信SmsSdkAppId在 [短信控制台] 添加应用后生成的实际SmsSdkAppId，示例如1400006666 */
+    SmsSdkAppId: "1400799213",
+    /* 短信签名内容: 使用 UTF-8 编码，必须填写已审核通过的签名，签名信息可登录 [短信控制台] 查看 */
+    SignName: "竞赛管理系统个人网",
+    /* 短信码号扩展号: 默认未开通，如需开通请联系 [sms helper] */
+    ExtendCode: "",
+    SenderId: "",
+    /* 用户的 session 内容: 可以携带用户侧 ID 等上下文信息，server 会原样返回 */
+    SessionContext: "",
+    /* 下发手机号码，采用 e.164 标准，+[国家或地区码][手机号]
+     * 示例如：+8613711112222， 其中前面有一个+号 ，86为国家码，13711112222为手机号，最多不要超过200个手机号*/
+    PhoneNumberSet: [],
+    /* 模板 ID: 必须填写已审核通过的模板 ID。模板ID可登录 [短信控制台] 查看 */
+    TemplateId: "",
+    /* 模板参数: 若无模板参数，则设置为空,参数只能为6位以下的数字*/
+    TemplateParamSet: [],
+};
+function sendSuccessSms(successName, phoneList) {
+    const param = {
+        ...defaultParams,
+        TemplateId: templateIdMap["signUpSuccess"],
+        PhoneNumberSet: phoneList,
+        TemplateParamSet: [successName],
+    };
+    client.SendSms(param, function (err, res) {
+        if (err) {
+            console.error(err, "err");
+            return;
+        }
+        console.log(res);
+    });
+}
+function sendCancelCompetitionSms(competitionName, cancelUser, phoneList) {
+    const param = {
+        ...defaultParams,
+        TemplateId: templateIdMap["cancelCompetition"],
+        PhoneNumberSet: phoneList,
+        TemplateParamSet: [competitionName, cancelUser],
+    };
+    client.SendSms(param, function (err, res) {
+        if (err) {
+            console.error(err, "err");
+            return;
+        }
+        console.log(res);
+    });
+}
+function sendSubscriptionSms(competitionName, status, phoneList) {
+    const param = {
+        ...defaultParams,
+        TemplateId: templateIdMap["subscriptionCompetition"],
+        PhoneNumberSet: phoneList,
+        TemplateParamSet: [competitionName, status],
+    };
+    client.SendSms(param, function (err, res) {
+        if (err) {
+            console.error(err, "err");
+            return;
+        }
+        console.log(res);
+    });
+}
+function sendRegisterSms(code, phoneList) {
+    const param = {
+        ...defaultParams,
+        TemplateId: templateIdMap["register"],
+        PhoneNumberSet: phoneList,
+        TemplateParamSet: [code],
+    };
+    return new Promise((resolve, reject) => {
+        client.SendSms(param, function (err, res) {
+            if (err) {
+                reject(err);
+                return;
+            }
+            console.log(res);
+            resolve(res.SendStatusSet[0].Code);
+        });
+    });
+}
 
 const setResponse = (ctx, body, status = 200) => {
     ctx.status = status;
@@ -266,6 +474,11 @@ async function syncCompetitionStatus() {
     try {
         const competitionList = await CompetitionModel.findAll({
             raw: true,
+            where: {
+                status: {
+                    [Op.not]: CompetitionStatus.end,
+                },
+            },
         });
         const needToSyncList = competitionList.filter((competition) => {
             const { registrationStartTime, registrationEndTime, workSubmissionStartTime, workSubmissionEndTime, status, } = competition;
@@ -282,7 +495,17 @@ async function syncCompetitionStatus() {
             competition.status = rightStatus;
             return true;
         });
+        const competitionIdToNameMap = new Map();
+        const signUpingIds = [];
+        const uploadingIds = [];
         for (const needSync of needToSyncList) {
+            competitionIdToNameMap.set(Number(needSync.id), needSync.name);
+            if (needSync.status === CompetitionStatus.signUping) {
+                signUpingIds.push(needSync.id);
+            }
+            if (needSync.status === CompetitionStatus.uploading) {
+                uploadingIds.push(needSync.id);
+            }
             CompetitionModel.update({
                 status: needSync.status,
             }, {
@@ -291,9 +514,49 @@ async function syncCompetitionStatus() {
                 },
             });
         }
+        const [signUpingUsers, uploadingUsers] = await Promise.all([
+            SubScriptionModel.findAll({
+                raw: true,
+                where: {
+                    competitionId: {
+                        [Op.in]: signUpingIds,
+                    },
+                },
+            }),
+            SubScriptionModel.findAll({
+                raw: true,
+                where: {
+                    competitionId: {
+                        [Op.in]: uploadingIds,
+                    },
+                },
+            }),
+        ]);
+        const signUpCompetitionName = {};
+        const uploadCompetitionName = {};
+        signUpingUsers.forEach((item) => {
+            const name = competitionIdToNameMap.get(Number(item.competitionId));
+            const val = signUpCompetitionName[name] || [];
+            val.push(item.user);
+            signUpCompetitionName[name] = val;
+        });
+        uploadingUsers.forEach((item) => {
+            const name = competitionIdToNameMap.get(Number(item.competitionId));
+            const val = uploadCompetitionName[name] || [];
+            val.push(item.user);
+            uploadCompetitionName[name] = val;
+        });
+        const signUpKeys = Object.keys(signUpCompetitionName);
+        const uploadKeys = Object.keys(uploadCompetitionName);
+        for (const key of signUpKeys) {
+            sendSubscriptionSms(key, "报名进行中", signUpCompetitionName[key]);
+        }
+        for (const key of uploadKeys) {
+            sendSubscriptionSms(key, "作品上传中", uploadCompetitionName[key]);
+        }
     }
     catch (e) {
-        console.log(e);
+        console.log(e, "err");
     }
 }
 function getDiff(prev, cur) {
@@ -411,52 +674,28 @@ __decorate([
 ], UserModel.prototype, "isDisable", void 0);
 __decorate([
     Column({
-        allowNull: false,
+        allowNull: true,
     }),
     __metadata("design:type", String)
 ], UserModel.prototype, "subscriptionList", void 0);
+__decorate([
+    Column({
+        allowNull: true,
+    }),
+    __metadata("design:type", String)
+], UserModel.prototype, "interested", void 0);
+__decorate([
+    Column({
+        allowNull: true,
+    }),
+    __metadata("design:type", String)
+], UserModel.prototype, "avatar", void 0);
 UserModel = __decorate([
     Table({
         tableName: "user",
     })
 ], UserModel);
 sequelize.addModels([UserModel]);
-
-var UserRole;
-(function (UserRole) {
-    UserRole[UserRole["student"] = 0] = "student";
-    UserRole[UserRole["teacher"] = 1] = "teacher";
-    UserRole[UserRole["admin"] = 2] = "admin";
-})(UserRole || (UserRole = {}));
-var CompetitionMode;
-(function (CompetitionMode) {
-    CompetitionMode[CompetitionMode["singe"] = 0] = "singe";
-    CompetitionMode[CompetitionMode["team"] = 1] = "team";
-})(CompetitionMode || (CompetitionMode = {}));
-var SignUpStatus;
-(function (SignUpStatus) {
-    SignUpStatus[SignUpStatus["pending"] = 1] = "pending";
-    SignUpStatus[SignUpStatus["fulfilled"] = 0] = "fulfilled";
-})(SignUpStatus || (SignUpStatus = {}));
-var CompetitionStatus;
-(function (CompetitionStatus) {
-    CompetitionStatus[CompetitionStatus["beforeSignUp"] = 0] = "beforeSignUp";
-    CompetitionStatus[CompetitionStatus["signUping"] = 1] = "signUping";
-    CompetitionStatus[CompetitionStatus["waitUpload"] = 2] = "waitUpload";
-    CompetitionStatus[CompetitionStatus["uploading"] = 3] = "uploading";
-    CompetitionStatus[CompetitionStatus["waitResult"] = 4] = "waitResult";
-    CompetitionStatus[CompetitionStatus["end"] = 5] = "end";
-})(CompetitionStatus || (CompetitionStatus = {}));
-var AlreadyProcess;
-(function (AlreadyProcess) {
-    AlreadyProcess[AlreadyProcess["yes"] = 1] = "yes";
-    AlreadyProcess[AlreadyProcess["no"] = 0] = "no";
-})(AlreadyProcess || (AlreadyProcess = {}));
-var UserDisable;
-(function (UserDisable) {
-    UserDisable[UserDisable["yes"] = 1] = "yes";
-    UserDisable[UserDisable["no"] = 0] = "no";
-})(UserDisable || (UserDisable = {}));
 
 class LoginService {
     async login({ password, phone }) {
@@ -465,7 +704,7 @@ class LoginService {
             where: {
                 phone,
             },
-            attributes: ["password", "role", 'isDisable'],
+            attributes: ["password", "role", "isDisable", "interested", "avatar"],
         });
         if (!isPhoneExist) {
             return serviceReturn({
@@ -490,6 +729,8 @@ class LoginService {
             data: {
                 phone,
                 role: isPhoneExist.role,
+                interested: JSON.parse(isPhoneExist.interested || "[]"),
+                avatar: isPhoneExist.avatar,
             },
         });
     }
@@ -522,9 +763,46 @@ var loginController = errCatch(new LoginController());
 const loginRouter = new Router({ prefix: "/login" });
 loginRouter.post("/", loginController.login);
 
+let RegisterCodeModel = class RegisterCodeModel extends Model {
+};
+__decorate([
+    Column({
+        primaryKey: true,
+        allowNull: false,
+        unique: true,
+    }),
+    __metadata("design:type", String)
+], RegisterCodeModel.prototype, "user", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], RegisterCodeModel.prototype, "expiration", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", String)
+], RegisterCodeModel.prototype, "code", void 0);
+RegisterCodeModel = __decorate([
+    Table({
+        tableName: "registerCode",
+        updatedAt: false,
+        createdAt: false,
+    })
+], RegisterCodeModel);
+sequelize.addModels([RegisterCodeModel]);
+
 class RegisterService {
     async register(param) {
-        const { phone, password, role } = param;
+        const { phone, password, role, sCode } = param;
+        if (!phone || !password || role === undefined || !sCode) {
+            return serviceReturn({
+                code: 400,
+                data: "参数错误",
+            });
+        }
         const alreadyExist = await UserModel.findOne({
             where: {
                 phone,
@@ -536,14 +814,89 @@ class RegisterService {
                 data: "当前手机号已经被注册过了",
             });
         }
-        await UserModel.create({
-            phone,
-            password: encrypt(password),
-            role,
+        const registerInfo = await RegisterCodeModel.findOne({
+            raw: true,
+            attributes: ["expiration", "code"],
+            where: {
+                user: phone,
+            },
         });
+        if (!registerInfo) {
+            return serviceReturn({
+                code: 400,
+                data: "短信验证码错误",
+            });
+        }
+        const { code, expiration } = registerInfo;
+        if (sCode !== code) {
+            return serviceReturn({
+                code: 400,
+                data: "短信验证码错误",
+            });
+        }
+        const now = Date.now();
+        const codeExpiration = Number(expiration);
+        if (now >= codeExpiration) {
+            return serviceReturn({
+                code: 400,
+                data: "短信验证码失效",
+            });
+        }
+        await Promise.all([
+            UserModel.create({
+                phone,
+                password: encrypt(password),
+                role,
+                isDisable: 0,
+            }),
+            RegisterCodeModel.destroy({
+                where: {
+                    user: phone,
+                },
+            }),
+        ]);
         return serviceReturn({
             code: 200,
             data: "注册成功",
+        });
+    }
+    async getCaptcha() {
+        const data = svgCaptcha.create();
+        return serviceReturn({
+            code: 200,
+            data,
+        });
+    }
+    async getSCaptcha(phone) {
+        const alreadyRegister = await UserModel.findOne({
+            raw: true,
+            attributes: ["phone"],
+            where: {
+                phone,
+            },
+        });
+        if (alreadyRegister) {
+            return serviceReturn({
+                code: 400,
+                data: "当前手机号已经注册过了",
+            });
+        }
+        const code = String(Number(Math.random().toFixed(6)) * 1000000)
+            .padEnd(6, "0")
+            .slice(0, 6);
+        const expiration = String(Date.now() + 10 * 60 * 1000);
+        const msg = await sendRegisterSms(code, [phone]);
+        const isSuccessSend = msg === "Ok";
+        if (isSuccessSend) {
+            await RegisterCodeModel.upsert({
+                user: phone,
+                code,
+                expiration,
+            });
+        }
+        return serviceReturn({
+            code: isSuccessSend ? 200 : 400,
+            data: isSuccessSend ? "短信已发送" : "短信发送失败，请稍后重试",
         });
     }
 }
@@ -551,12 +904,13 @@ var registerService = errCatch(new RegisterService());
 
 class RegisterController {
     async register(ctx) {
-        const { phone, password, role } = ctx.request.body;
+        const { phone, password, role, sCode } = ctx.request.body;
         if (phone && password && role !== undefined) {
             const { data, status } = await registerService.register({
                 phone,
                 password,
                 role,
+                sCode,
             });
             setResponse(ctx, data, status);
         }
@@ -565,11 +919,22 @@ class RegisterController {
             ctx.app.emit("error", err, ctx);
         }
     }
+    async getCaptcha(ctx) {
+        const { status, data } = await registerService.getCaptcha();
+        setResponse(ctx, data, status);
+    }
+    async getSCaptcha(ctx) {
+        const { phone } = ctx.query;
+        const { status, data } = await registerService.getSCaptcha(phone);
+        setResponse(ctx, data, status);
+    }
 }
 var registerController = errCatch(new RegisterController());
 
 const registerRouter$1 = new Router({ prefix: "/register" });
 registerRouter$1.post('/', registerController.register);
+registerRouter$1.get('/captcha', registerController.getCaptcha);
+registerRouter$1.get('/s-captcha', registerController.getSCaptcha);
 
 let SignUpModel = class SignUpModel extends Model {
 };
@@ -752,7 +1117,7 @@ FileModel = __decorate([
 ], FileModel);
 sequelize.addModels([FileModel]);
 
-let SubScriptionModel = class SubScriptionModel extends Model {
+let TagCompetitionMapModel = class TagCompetitionMapModel extends Model {
 };
 __decorate([
     Column({
@@ -761,35 +1126,65 @@ __decorate([
         allowNull: false,
     }),
     __metadata("design:type", Number)
-], SubScriptionModel.prototype, "id", void 0);
+], TagCompetitionMapModel.prototype, "id", void 0);
 __decorate([
     Column({
         allowNull: false,
-        unique: true
+        unique: true,
     }),
     __metadata("design:type", Number)
-], SubScriptionModel.prototype, "competitionId", void 0);
+], TagCompetitionMapModel.prototype, "competitionId", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+        unique: true,
+    }),
+    __metadata("design:type", Number)
+], TagCompetitionMapModel.prototype, "tagId", void 0);
+__decorate([
+    Column({
+        allowNull: false,
+    }),
+    __metadata("design:type", Date)
+], TagCompetitionMapModel.prototype, "createdAt", void 0);
+TagCompetitionMapModel = __decorate([
+    Table({
+        tableName: "tag-competition-map",
+        updatedAt: false
+    })
+], TagCompetitionMapModel);
+sequelize.addModels([TagCompetitionMapModel]);
+
+let TagModel = class TagModel extends Model {
+};
+__decorate([
+    Column({
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false,
+    }),
+    __metadata("design:type", Number)
+], TagModel.prototype, "id", void 0);
 __decorate([
     Column({
         allowNull: false,
         unique: true,
     }),
     __metadata("design:type", String)
-], SubScriptionModel.prototype, "user", void 0);
+], TagModel.prototype, "name", void 0);
 __decorate([
-    Column,
+    Column({
+        allowNull: false,
+    }),
     __metadata("design:type", Date)
-], SubScriptionModel.prototype, "createdAt", void 0);
-__decorate([
-    Column,
-    __metadata("design:type", Date)
-], SubScriptionModel.prototype, "updatedAt", void 0);
-SubScriptionModel = __decorate([
+], TagModel.prototype, "createdAt", void 0);
+TagModel = __decorate([
     Table({
-        tableName: "subscription",
+        tableName: "tag",
+        updatedAt: false,
     })
-], SubScriptionModel);
-sequelize.addModels([SubScriptionModel]);
+], TagModel);
+sequelize.addModels([TagModel]);
 
 class CompetitionService {
     async getCompetitionList(offset = 0, size = 10, name, level, status, user) {
@@ -862,6 +1257,17 @@ class CompetitionService {
                 },
             }),
         ]);
+        const tags = JSON.parse(competitionDetail?.tags || "[]");
+        const tagNameList = (await TagModel.findAll({
+            raw: true,
+            attributes: ["name"],
+            where: {
+                id: {
+                    [Op.in]: tags,
+                },
+            },
+        })).map((tag) => tag.name);
+        console.log(tagNameList);
         const { registrationStartTime, registrationEndTime, workSubmissionStartTime, workSubmissionEndTime, status, } = competitionDetail;
         const { signUpedList, signUpingList, confirmList, role, instructoredList, instructoringList, } = userInfo;
         let signUp = false;
@@ -929,6 +1335,7 @@ class CompetitionService {
                 work,
                 instructors,
                 member,
+                tags: tagNameList,
             },
         });
     }
@@ -965,7 +1372,7 @@ class CompetitionService {
                 data: "当前用户没有创建竞赛的权限",
             });
         }
-        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, files, imgs, signUpNums, awards, } = data;
+        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, tags, files, imgs, signUpNums, awards, } = data;
         const registrationStartTime = formatTime(registrationTime[0]);
         const registrationEndTime = formatTime(registrationTime[1]);
         const workSubmissionStartTime = formatTime(workSubmissionTime[0]);
@@ -992,6 +1399,7 @@ class CompetitionService {
                 workSubmissionStartTime,
                 workSubmissionEndTime,
                 judges: JSON.stringify(judges),
+                tags: JSON.stringify(tags),
                 files: JSON.stringify(files),
                 imgs: JSON.stringify(imgs),
                 opUser,
@@ -1055,6 +1463,12 @@ class CompetitionService {
                     },
                 }));
             });
+            tags.forEach((tagId) => {
+                promiseList.push(TagCompetitionMapModel.create({
+                    competitionId,
+                    tagId,
+                }));
+            });
             await Promise.all(promiseList);
             return serviceReturn({
                 code: 200,
@@ -1086,7 +1500,6 @@ class CompetitionService {
                 data: "当前修改的竞赛不存在",
             });
         }
-        console.log(rawCompetition.opUser, user);
         if (userInfo?.role !== UserRole.admin && rawCompetition.opUser !== user) {
             return serviceReturn({
                 code: 400,
@@ -1094,7 +1507,8 @@ class CompetitionService {
             });
         }
         const rawJudges = JSON.parse(rawCompetition.judges || "[]");
-        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, files, imgs, signUpNums, awards, } = data;
+        const rawTags = JSON.parse(rawCompetition.tags || "[]");
+        const { name, description, address, level, instructorsNums, mode, rounds, registrationTime, workSubmissionTime, judges, tags, files, imgs, signUpNums, awards, } = data;
         const registrationStartTime = formatTime(registrationTime[0]);
         const registrationEndTime = formatTime(registrationTime[1]);
         const workSubmissionStartTime = formatTime(workSubmissionTime[0]);
@@ -1131,6 +1545,22 @@ class CompetitionService {
                 }),
             ]);
             const promiseList = [];
+            const newTags = tags || [];
+            const [newAddTags, removeTags] = getDiff(rawTags, newTags);
+            newAddTags.forEach((tagId) => {
+                promiseList.push(TagCompetitionMapModel.create({
+                    competitionId: data.id,
+                    tagId,
+                }));
+            });
+            promiseList.push(TagCompetitionMapModel.destroy({
+                where: {
+                    tagId: {
+                        [Op.in]: removeTags,
+                    },
+                    competitionId: data.id,
+                },
+            }));
             [
                 [addUserList, "add"],
                 [removeUserList, "remove"],
@@ -1166,6 +1596,7 @@ class CompetitionService {
                 workSubmissionStartTime,
                 workSubmissionEndTime,
                 judges: JSON.stringify(judges),
+                tags: JSON.stringify(tags),
                 files: JSON.stringify(files),
                 imgs: JSON.stringify(imgs),
                 signUpNums: signUpNums ? JSON.stringify(signUpNums) : signUpNums,
@@ -1263,6 +1694,34 @@ class CompetitionService {
                 list.registrationStartTime = formatTime(list.registrationStartTime);
                 list.registrationEndTime = formatTime(list.registrationEndTime);
                 list.subscription = subscriptionSet.has(list.id);
+            });
+            return serviceReturn({
+                code: 200,
+                data: {
+                    list: returnList.rows,
+                    count: returnList.count,
+                },
+            });
+        }
+        if (field === "subscriptionList") {
+            const returnList = await CompetitionModel.findAndCountAll({
+                raw: true,
+                order: [["createdAt", "DESC"]],
+                where: {
+                    id: {
+                        [Op.in]: [...subscriptionSet],
+                    },
+                    name: {
+                        [Op.like]: `%${competitionName}%`,
+                    },
+                },
+                offset,
+                limit: pageSize,
+            });
+            returnList.rows.forEach((list) => {
+                list.registrationStartTime = formatTime(list.registrationStartTime);
+                list.registrationEndTime = formatTime(list.registrationEndTime);
+                list.subscription = true;
             });
             return serviceReturn({
                 code: 200,
@@ -1438,7 +1897,8 @@ class CompetitionService {
         }
         const res = sequelize.transaction(async () => {
             const promiseList = [];
-            const { judges, files, imgs } = competitionDetail;
+            const { judges, files, imgs, tags } = competitionDetail;
+            const tagIdList = JSON.parse(tags || "[]");
             const _judges = JSON.parse(judges || "[]");
             const userList = [..._judges];
             const competitionFiles = JSON.parse(files || "[]");
@@ -1626,6 +2086,14 @@ class CompetitionService {
                     },
                 }));
             }
+            // 删除标签
+            promiseList.push(TagCompetitionMapModel.destroy({
+                where: {
+                    competitionId: {
+                        [Op.in]: tagIdList,
+                    },
+                },
+            }));
             promiseList.push(CompetitionModel.destroy({
                 where: {
                     id,
@@ -1643,6 +2111,198 @@ class CompetitionService {
             });
         });
         return res;
+    }
+    async getRecommendCompetition(user) {
+        const userDetail = await UserModel.findOne({
+            attributes: ["interested"],
+            where: {
+                phone: user,
+            },
+            raw: true,
+        });
+        const recommendId = JSON.parse(userDetail?.interested || "[]");
+        const recommendCompetitionIdList = (await TagCompetitionMapModel.findAll({
+            raw: true,
+            attributes: ["competitionId"],
+            order: [["createdAt", "DESC"]],
+            where: {
+                tagId: {
+                    [Op.in]: recommendId,
+                },
+            },
+        })).map((item) => item.competitionId);
+        const [competitionList, defaultList, subscriptionList] = await Promise.all([
+            CompetitionModel.findAll({
+                raw: true,
+                order: [["createdAt", "DESC"]],
+                where: {
+                    id: {
+                        [Op.in]: recommendCompetitionIdList,
+                    },
+                },
+                limit: 5,
+            }),
+            CompetitionModel.findAll({
+                raw: true,
+                order: [["createdAt", "DESC"]],
+                limit: 5,
+            }),
+            SubScriptionModel.findAll({
+                raw: true,
+                attributes: ["competitionId"],
+                where: {
+                    user,
+                },
+            }),
+        ]);
+        const subscriptionSet = new Set(subscriptionList.map((item) => item.competitionId));
+        const [returnList, defaultReturnList] = [competitionList, defaultList].map((list) => {
+            return list.map((item) => {
+                const { name, level, id, address, registrationStartTime, registrationEndTime, status, workSubmissionStartTime, workSubmissionEndTime, } = item;
+                return {
+                    ...item,
+                    id,
+                    name,
+                    level,
+                    address,
+                    registrationStartTime: formatTime(registrationStartTime),
+                    registrationEndTime: formatTime(registrationEndTime),
+                    workSubmissionStartTime: formatTime(workSubmissionStartTime),
+                    workSubmissionEndTime: formatTime(workSubmissionEndTime),
+                    status,
+                    subscription: subscriptionSet.has(id),
+                };
+            });
+        });
+        return serviceReturn({
+            code: 200,
+            data: {
+                list: returnList.length ? returnList : defaultReturnList,
+            },
+        });
+    }
+    async getCompetitionLevelData() {
+        const competitionDetailList = await CompetitionModel.findAll({
+            raw: true,
+            attributes: ["level"],
+        });
+        const competitionLevelData = [
+            { value: 0, name: "国家级" },
+            { value: 0, name: "省级" },
+            { value: 0, name: "市级" },
+            { value: 0, name: "校级" },
+            { value: 0, name: "院级" },
+        ];
+        competitionDetailList.forEach((detail) => {
+            competitionLevelData[Number(detail.level)].value += 1;
+        });
+        return serviceReturn({
+            code: 200,
+            data: competitionLevelData,
+        });
+    }
+    async getCompetitionStatusData() {
+        const keys = [
+            "竞赛未开始",
+            "报名进行中",
+            "等待开放作品提交",
+            "作品上传中",
+            "评委评判中",
+            "竞赛已结束",
+        ];
+        const values = new Array(keys.length).fill(0);
+        const competitionStatusList = await CompetitionModel.findAll({
+            raw: true,
+            attributes: ["status"],
+        });
+        competitionStatusList.forEach((item) => (values[item.status] += 1));
+        return serviceReturn({
+            code: 200,
+            data: {
+                keys,
+                values,
+            },
+        });
+    }
+    async getCompetitionTagData() {
+        const tagList = await TagModel.findAll({
+            raw: true,
+        });
+        const tagIdToTagNameMap = {};
+        const tagNameMap = {};
+        tagList.forEach((tag) => (tagIdToTagNameMap[tag.id] = tag.name));
+        const competitionTagList = await TagCompetitionMapModel.findAll({
+            raw: true,
+        });
+        competitionTagList.forEach((item) => {
+            const tagName = tagIdToTagNameMap[item.tagId];
+            const val = tagNameMap[tagName] || 0;
+            tagNameMap[tagName] = val + 1;
+        });
+        const returnList = [];
+        const tagNames = Object.keys(tagNameMap);
+        for (const tagName of tagNames) {
+            returnList.push({
+                value: tagNameMap[tagName],
+                name: tagName,
+            });
+        }
+        return serviceReturn({
+            code: 200,
+            data: returnList.filter((item) => item.value !== 0),
+        });
+    }
+    async getAwardsExcel(competitionId) {
+        const competition = await CompetitionModel.findOne({
+            raw: true,
+            attributes: ["status", "name"],
+            where: {
+                id: competitionId,
+            },
+        });
+        if (competition?.status !== CompetitionStatus.end) {
+            return serviceReturn({
+                code: 400,
+                data: "当前阶段无法生成excel",
+            });
+        }
+        const signUpList = await SignUpModel.findAll({
+            raw: true,
+            where: {
+                competitionId,
+            },
+        });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("Sheet 1");
+        // 设置首行的标题
+        console.log(signUpList);
+        const headerRow = worksheet.getRow(1);
+        headerRow.getCell(1).value = "成员";
+        headerRow.getCell(2).value = "指导老师";
+        headerRow.getCell(3).value = "竞赛轮次";
+        headerRow.getCell(4).value = "获得奖项";
+        // 添加数据行
+        try {
+            signUpList.forEach((signUpInfo, index) => {
+                const row = worksheet.getRow(index + 2);
+                row.getCell(1).value =
+                    signUpInfo.leader + JSON.parse(signUpInfo.member || "[]").join(",");
+                row.getCell(2).value = JSON.parse(signUpInfo.instructors || "[]").join(",");
+                row.getCell(3).value = signUpInfo.currentRound;
+                row.getCell(4).value = signUpInfo.award || "未获奖";
+            });
+        }
+        catch (e) {
+            console.log(e);
+        }
+        const buffer = await workbook.xlsx.writeBuffer();
+        return serviceReturn({
+            code: 200,
+            data: {
+                name: competition?.name,
+                buffer,
+            },
+        });
     }
 }
 var competitionService = errCatch(new CompetitionService());
@@ -1697,6 +2357,37 @@ class CompetitionController {
         const { status, data } = await competitionService.setCompetitionNextRound(Number(competitionId));
         setResponse(ctx, data, status);
     }
+    async getRecommendCompetition(ctx) {
+        const user = ctx.phone;
+        const { status, data } = await competitionService.getRecommendCompetition(user);
+        setResponse(ctx, data, status);
+    }
+    async getCompetitionLevelData(ctx) {
+        const { status, data } = await competitionService.getCompetitionLevelData();
+        setResponse(ctx, data, status);
+    }
+    async getCompetitionStatusData(ctx) {
+        const { status, data } = await competitionService.getCompetitionStatusData();
+        setResponse(ctx, data, status);
+    }
+    async getCompetitionTagData(ctx) {
+        const { status, data } = await competitionService.getCompetitionTagData();
+        setResponse(ctx, data, status);
+    }
+    async getAwardsExcel(ctx) {
+        const { competitionId } = ctx.query;
+        const { status, data } = await competitionService.getAwardsExcel(competitionId);
+        if (typeof data.data === "string") {
+            setResponse(ctx, data, status);
+        }
+        else {
+            ctx.type =
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            ctx.response.attachment(`${data.data.name}.xlsx`);
+            // ctx.response.attachment(`${(data as any).name}.xlsx`);
+            ctx.body = data.data.buffer;
+        }
+    }
 }
 var competitionController = errCatch(new CompetitionController());
 
@@ -1732,8 +2423,13 @@ competitionRouter.post("/create", verifyToken, competitionController.createCompe
 competitionRouter.post("/update", verifyToken, competitionController.updateCompetition);
 competitionRouter.post('/delete', verifyToken, competitionController.deleteCompetition);
 competitionRouter.post("/set/next", verifyToken, competitionController.setCompetitionNextRound);
+competitionRouter.get('/recommend', verifyToken, competitionController.getRecommendCompetition);
+competitionRouter.get('/level', verifyToken, competitionController.getCompetitionLevelData);
+competitionRouter.get('/status', verifyToken, competitionController.getCompetitionStatusData);
+competitionRouter.get('/tag', verifyToken, competitionController.getCompetitionTagData);
 // 竞赛相关用户，比如发布时选择评委，报名时选择导师，学生
 competitionRouter.get("/user", verifyToken, competitionController.getCompetitionUser);
+competitionRouter.get("/excel", verifyToken, competitionController.getAwardsExcel);
 
 class UploadService {
     async createFileRecord(file) {
@@ -1757,7 +2453,6 @@ class UploadService {
             });
         }
         else {
-            console.log("create");
             try {
                 await FileModel.create({
                     originalname,
@@ -1788,6 +2483,151 @@ class UploadService {
     }
 }
 var uploadService = errCatch(new UploadService());
+
+class UserService {
+    async getUserList(pageSize, offset, filter) {
+        const userList = await UserModel.findAndCountAll({
+            raw: true,
+            attributes: ["phone", "role", "createdAt", "updatedAt", "isDisable"],
+            order: [["createdAt", "DESC"]],
+            offset,
+            limit: pageSize,
+            where: {
+                role: {
+                    [Op.in]: [UserRole.student, UserRole.teacher],
+                },
+                phone: {
+                    [Op.like]: `%${filter}%`,
+                },
+            },
+        });
+        return serviceReturn({
+            code: 200,
+            data: {
+                list: userList.rows.map(({ phone, role, createdAt, updatedAt, isDisable }) => ({
+                    phone,
+                    role,
+                    isDisable,
+                    createdAt: formatTime(createdAt?.toString()),
+                    updatedAt: formatTime(updatedAt?.toString()),
+                })),
+                total: userList.count,
+            },
+        });
+    }
+    async updateUserIsDisable(updateUser, isDisable, opUser) {
+        const [opUserInfo, updateUserInfo] = await Promise.all([
+            UserModel.findOne({
+                raw: true,
+                attributes: ["role"],
+                where: {
+                    phone: opUser,
+                },
+            }),
+            UserModel.findOne({
+                raw: true,
+                where: {
+                    phone: updateUser,
+                },
+            }),
+        ]);
+        if (!updateUserInfo) {
+            return serviceReturn({
+                code: 400,
+                data: "修改的用户不存在",
+            });
+        }
+        if (opUserInfo?.role !== UserRole.admin) {
+            return serviceReturn({
+                code: 400,
+                data: "没有修改用户的权限",
+            });
+        }
+        await UserModel.update({
+            isDisable,
+        }, {
+            where: {
+                phone: updateUser,
+            },
+        });
+        return serviceReturn({
+            code: 200,
+            data: "更新成功",
+        });
+    }
+    async updateUserInterested(interested, user) {
+        await UserModel.update({
+            interested: JSON.stringify(interested),
+        }, {
+            where: {
+                phone: user,
+            },
+        });
+        return serviceReturn({
+            code: 200,
+            data: "更新成功",
+        });
+    }
+    async updateUserAvatar(user, avatar) {
+        await UserModel.update({
+            avatar,
+        }, {
+            where: {
+                phone: user,
+            },
+        });
+        return serviceReturn({
+            code: 200,
+            data: "更新成功",
+        });
+    }
+    async getUserAwardList(user) {
+        const userInfo = await UserModel.findOne({
+            raw: true,
+            where: {
+                phone: user,
+            },
+        });
+        if (!userInfo) {
+            return serviceReturn({
+                code: 400,
+                data: "当前用户不存在",
+            });
+        }
+        const role = userInfo.role;
+        const filed = role === UserRole.student ? "signUpedList" : "instructoredList";
+        const signUpList = JSON.parse(userInfo[filed] || "[]");
+        const signUpInfoList = await SignUpModel.findAll({
+            raw: true,
+            where: {
+                id: {
+                    [Op.in]: signUpList,
+                },
+                award: {
+                    [Op.not]: null,
+                },
+            },
+        });
+        const competitionIdList = signUpInfoList.map((info) => Number(info.competitionId));
+        const finishCompetitionIdList = (await CompetitionModel.findAll({
+            raw: true,
+            attributes: ["id"],
+            where: {
+                id: {
+                    [Op.in]: competitionIdList,
+                },
+                status: CompetitionStatus.end,
+            },
+        })).map((info) => info.id);
+        return serviceReturn({
+            code: 200,
+            data: {
+                list: signUpInfoList.filter((info) => finishCompetitionIdList.includes(Number(info.competitionId))),
+            },
+        });
+    }
+}
+var userService = errCatch(new UserService());
 
 const distPath = resolve(process.cwd(), "./upload");
 const storage = multer.diskStorage({
@@ -1836,7 +2676,7 @@ class UploadController {
             },
         });
     }
-    async uploadImg(ctx, next) {
+    async uploadCompetitionImg(ctx, next) {
         await upload.single("img")(ctx, next);
         if (ctx.file) {
             await uploadService.createFileRecord(ctx.file);
@@ -1855,8 +2695,8 @@ class UploadController {
         if (existsSync(file.path)) {
             const stream = createReadStream(file.path);
             ctx.type = file.mimetype;
-            ctx.set('Content-Length', String(file.size));
-            ctx.set('Accept-Ranges', "bytes");
+            ctx.set("Content-Length", String(file.size));
+            ctx.set("Accept-Ranges", "bytes");
             setResponse(ctx, stream, 200);
         }
         else {
@@ -1865,7 +2705,7 @@ class UploadController {
             });
         }
     }
-    async uploadWork(ctx, next) {
+    async uploadSignUpWork(ctx, next) {
         await upload.single("work")(ctx, next);
         if (ctx.file) {
             await uploadService.createFileRecord(ctx.file);
@@ -1878,11 +2718,25 @@ class UploadController {
             },
         });
     }
-    async uploadVideo(ctx, next) {
+    async uploadSignUpVideo(ctx, next) {
         await upload.single("video")(ctx, next);
         if (ctx.file) {
             await uploadService.createFileRecord(ctx.file);
         }
+        setResponse(ctx, {
+            code: 200,
+            data: {
+                filename: ctx.req.saveFileName,
+                originalname: ctx.req.originalname,
+            },
+        });
+    }
+    async uploadUserAvatar(ctx, next) {
+        await upload.single("avatar")(ctx, next);
+        if (ctx.file) {
+            await uploadService.createFileRecord(ctx.file);
+        }
+        await userService.updateUserAvatar(ctx.phone, ctx.req.saveFileName);
         setResponse(ctx, {
             code: 200,
             data: {
@@ -1897,9 +2751,10 @@ var uploadController = errCatch(new UploadController());
 const uploadRouter = new Router();
 uploadRouter.get("/file/:filename", uploadController.getFile);
 uploadRouter.post("/upload/competition/file", verifyToken, uploadController.uploadFile);
-uploadRouter.post("/upload/competition/img", verifyToken, uploadController.uploadImg);
-uploadRouter.post("/upload/signup/work", verifyToken, uploadController.uploadWork);
-uploadRouter.post('/upload/signup/video', verifyToken, uploadController.uploadVideo);
+uploadRouter.post("/upload/competition/img", verifyToken, uploadController.uploadCompetitionImg);
+uploadRouter.post("/upload/signup/work", verifyToken, uploadController.uploadSignUpWork);
+uploadRouter.post('/upload/signup/video', verifyToken, uploadController.uploadSignUpVideo);
+uploadRouter.post('/upload/user/avatar', verifyToken, uploadController.uploadUserAvatar);
 
 class SignUpService {
     async processFileRecord(type, fileString, id, promiseList) {
@@ -2049,6 +2904,13 @@ class SignUpService {
                 await this.processFileRecord("add", video, signUpId, promiseList);
             }
             await Promise.all(promiseList);
+            try {
+                const a = {};
+                console.log(a());
+            }
+            catch (e) {
+                console.log(e.stack);
+            }
             return serviceReturn({
                 code: 200,
                 data: mode === CompetitionMode.singe
@@ -2190,6 +3052,7 @@ class SignUpService {
                         id: signUpId,
                     },
                 }));
+                sendSuccessSms(signUpInfo.competitionName, totalTeamMember);
                 await Promise.all(promiseList);
             }
             return serviceReturn({
@@ -2284,6 +3147,9 @@ class SignUpService {
                     id: signUpId,
                 },
             }));
+            sendCancelCompetitionSms(signUpInfo.competitionName, user, [
+                resolveMember,
+            ]);
             await Promise.all(promiseList);
             return serviceReturn({ code: 200, data: "拒绝成功" });
         });
@@ -2659,7 +3525,7 @@ class SignUpService {
         });
         return res;
     }
-    async getSignUpListByCompetitionId(competitionId, user, alreadyProcess) {
+    async getSignUpListByCompetitionId(competitionId, user, alreadyProcess, offset, pageSize) {
         const competitionDetail = await CompetitionModel.findOne({
             raw: true,
             where: {
@@ -2689,6 +3555,8 @@ class SignUpService {
         const signUpList = await SignUpModel.findAndCountAll({
             raw: true,
             where: whereOptions,
+            limit: pageSize,
+            offset,
         });
         return serviceReturn({
             code: 200,
@@ -2777,8 +3645,8 @@ class SignUpController {
     async getSignUpListByCompetitionId(ctx) {
         const { competitionId } = ctx.params;
         const user = ctx.phone;
-        const { alreadyProcess } = ctx.query;
-        const { status, data } = await signUpService.getSignUpListByCompetitionId(competitionId, user, Number(alreadyProcess));
+        const { alreadyProcess, offset, pageSize } = ctx.query;
+        const { status, data } = await signUpService.getSignUpListByCompetitionId(competitionId, user, Number(alreadyProcess), Number(offset), Number(pageSize));
         setResponse(ctx, data, status);
     }
     async promoteSignUpBySignUpId(ctx) {
@@ -2817,80 +3685,6 @@ signUpRouter.post("/update", verifyToken, signUpController.updateSignUpInfo);
 signUpRouter.post("/promote", verifyToken, signUpController.promoteSignUpBySignUpId);
 signUpRouter.post("/award", verifyToken, signUpController.awardSignUpBySignUpId);
 
-class UserService {
-    async getUserList(pageSize, offset, filter) {
-        const userList = await UserModel.findAndCountAll({
-            raw: true,
-            attributes: ["phone", "role", "createdAt", "updatedAt", "isDisable"],
-            order: [["createdAt", "DESC"]],
-            offset,
-            limit: pageSize,
-            where: {
-                role: {
-                    [Op.in]: [UserRole.student, UserRole.teacher],
-                },
-                phone: {
-                    [Op.like]: `%${filter}%`,
-                },
-            },
-        });
-        return serviceReturn({
-            code: 200,
-            data: {
-                list: userList.rows.map(({ phone, role, createdAt, updatedAt, isDisable }) => ({
-                    phone,
-                    role,
-                    isDisable,
-                    createdAt: formatTime(createdAt?.toString()),
-                    updatedAt: formatTime(updatedAt?.toString()),
-                })),
-                total: userList.count,
-            },
-        });
-    }
-    async updateUserIsDisable(updateUser, isDisable, opUser) {
-        const [opUserInfo, updateUserInfo] = await Promise.all([
-            UserModel.findOne({
-                raw: true,
-                attributes: ["role"],
-                where: {
-                    phone: opUser,
-                },
-            }),
-            UserModel.findOne({
-                raw: true,
-                where: {
-                    phone: updateUser,
-                },
-            }),
-        ]);
-        if (!updateUserInfo) {
-            return serviceReturn({
-                code: 400,
-                data: "修改的用户不存在",
-            });
-        }
-        if (opUserInfo?.role !== UserRole.admin) {
-            return serviceReturn({
-                code: 400,
-                data: "没有修改用户的权限",
-            });
-        }
-        await UserModel.update({
-            isDisable,
-        }, {
-            where: {
-                phone: updateUser,
-            },
-        });
-        return serviceReturn({
-            code: 200,
-            data: "更新成功",
-        });
-    }
-}
-var userService = errCatch(new UserService());
-
 class UserController {
     async getUserList(ctx) {
         const { pageSize, offset, filter } = ctx.query;
@@ -2903,12 +3697,24 @@ class UserController {
         const { status, data } = await userService.updateUserIsDisable(user, isDisable, opUser);
         setResponse(ctx, data, status);
     }
+    async updateUserInterested(ctx) {
+        const { interested } = ctx.request.body;
+        const user = ctx.phone;
+        const { status, data } = await userService.updateUserInterested(interested, user);
+        setResponse(ctx, data, status);
+    }
+    async getUserAwardList(ctx) {
+        const { status, data } = await userService.getUserAwardList(ctx.phone);
+        setResponse(ctx, data, status);
+    }
 }
 var userController = errCatch(new UserController());
 
 const userRouter = new Router({ prefix: "/user" });
 userRouter.get("/list", verifyToken, userController.getUserList);
 userRouter.post('/update/is-disable', verifyToken, userController.updateIsDisable);
+userRouter.post('/update/interested', verifyToken, userController.updateUserInterested);
+userRouter.get('/award/list', verifyToken, userController.getUserAwardList);
 
 class SubscriptionService {
     async subscribe(user, competitionId) {
@@ -2957,6 +3763,31 @@ var subscriptionController = errCatch(new SubscriptionController());
 const subscriptionRouter = new Router({ prefix: '/subscription' });
 subscriptionRouter.post('/subscribe', verifyToken, subscriptionController.subscribe);
 
+class TagService {
+    async getTagList() {
+        const tagList = await TagModel.findAll({
+            raw: true,
+        });
+        const res = tagList.map((tag) => ({ value: tag.id, label: tag.name }));
+        return serviceReturn({
+            code: 200,
+            data: res,
+        });
+    }
+}
+var tagService = errCatch(new TagService());
+
+class TagController {
+    async getTagList(ctx) {
+        const { data, status } = await tagService.getTagList();
+        setResponse(ctx, data, status);
+    }
+}
+var tagController = errCatch(new TagController());
+
+const tagRouter = new Router({ prefix: "/tag" });
+tagRouter.get("/", verifyToken, tagController.getTagList);
+
 var router = /*#__PURE__*/Object.freeze({
     __proto__: null,
     competitionRouter: competitionRouter,
@@ -2964,6 +3795,7 @@ var router = /*#__PURE__*/Object.freeze({
     registerRouter: registerRouter$1,
     signUpRouter: signUpRouter,
     subscriptionRouter: subscriptionRouter,
+    tagRouter: tagRouter,
     uploadRouter: uploadRouter,
     userRouter: userRouter
 });
